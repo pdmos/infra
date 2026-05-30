@@ -10,6 +10,8 @@
   imports = [
     ./disko.nix
     ./nix.nix
+    ./acme.nix
+    ./pocket-id.nix
     inputs.srvos.nixosModules.server
     inputs.srvos.nixosModules.hardware-hetzner-cloud
     inputs.agenix.nixosModules.default

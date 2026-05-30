@@ -1,6 +1,6 @@
 let
   sshKeys = import ../ssh-keys.nix;
-  inherit (sshKeys) dvcorreia dvcorreia-yubikey;
+  inherit (sshKeys) dvcorreia dvcorreia-yubikey lena;
 in
 {
   "hetzner-api-token.age".publicKeys = [
@@ -14,5 +14,9 @@ in
   "cloudflare-dns-token.age".publicKeys = [
     dvcorreia
     dvcorreia-yubikey
+  ];
+  "pocket-id.age".publicKeys = [
+    dvcorreia
+    lena
   ];
 }

@@ -4,6 +4,12 @@ locals {
 
 locals {
   pdmos_pt_domain = "pdmos.pt"
+  pdmos_pt_subdomains = {
+    id = {
+      proxied     = true
+      description = "Pocket ID OIDC server"
+    }
+  }
 }
 
 data "cloudflare_zone" "pdmos_pt" {
@@ -38,4 +44,44 @@ resource "cloudflare_dns_record" "pdmos_pt_aaaa" {
   proxied = true
   ttl     = 1
   comment = local.dns_record_comment
+}
+
+resource "cloudflare_dns_record" "pdmos_pt_subdomain_a" {
+  for_each = local.pdmos_pt_subdomains
+
+  zone_id = data.cloudflare_zone.pdmos_pt.id
+  name    = "${each.key}.${local.pdmos_pt_domain}"
+  content = hcloud_primary_ip.lena_primary_ip.ip_address
+  type    = "A"
+
+  proxied = try(each.value.proxied, true)
+  ttl     = try(each.value.ttl, 1)
+
+  comment = join(
+    " | ",
+    compact([
+      try(each.value.description, null),
+      local.dns_record_comment,
+    ])
+  )
+}
+
+resource "cloudflare_dns_record" "pdmos_pt_subdomain_aaaa" {
+  for_each = local.pdmos_pt_subdomains
+
+  zone_id = data.cloudflare_zone.pdmos_pt.id
+  name    = "${each.key}.${local.pdmos_pt_domain}"
+  content = hcloud_primary_ip.lena_primary_ipv6.ip_address
+  type    = "AAAA"
+
+  proxied = try(each.value.proxied, true)
+  ttl     = try(each.value.ttl, 1)
+
+  comment = join(
+    " | ",
+    compact([
+      try(each.value.description, null),
+      local.dns_record_comment,
+    ])
+  )
 }
