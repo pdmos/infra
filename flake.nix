@@ -45,6 +45,7 @@
             secrets = {
               TF_VAR_hcloud_token.file = ./secrets/hetzner-api-token.age;
               TF_VAR_passphrase.file = ./secrets/opentofu-encryption-key.age;
+              TF_VAR_cloudflare_api_token.file = ./secrets/cloudflare-dns-token.age;
             };
           };
         in
