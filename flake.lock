@@ -68,6 +68,26 @@
         "type": "github"
       }
     },
+    "disko": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1780048612,
+        "narHash": "sha256-Md/eOK5OjmvvHc2H52pLZe4zpP4XyfiS5vHqfRCz2HU=",
+        "owner": "nix-community",
+        "repo": "disko",
+        "rev": "caa775cf67bfdc47f940edd96c975b5016df9059",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "disko",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -255,7 +275,29 @@
       "inputs": {
         "agenix": "agenix",
         "agenix-shell": "agenix-shell",
-        "nixpkgs": "nixpkgs_2"
+        "disko": "disko",
+        "nixpkgs": "nixpkgs_2",
+        "srvos": "srvos"
+      }
+    },
+    "srvos": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779937250,
+        "narHash": "sha256-IaunSf8CcW8rFUgIE9k2CdlrPbIx+RgkR7jAlliDQPw=",
+        "owner": "nix-community",
+        "repo": "srvos",
+        "rev": "77faea4aed26379aa30304850dd0ef2b6f2dfe28",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "srvos",
+        "type": "github"
       }
     },
     "systems": {

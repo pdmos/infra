@@ -7,6 +7,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     agenix-shell.url = "github:aciceri/agenix-shell";
+
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    srvos = {
+      url = "github:nix-community/srvos";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -27,6 +37,12 @@
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
     in
     {
+      nixosConfigurations.lena = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [ ./hosts/lena/configuration.nix ];
+        specialArgs = { inherit inputs; };
+      };
+
       formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
 
       sshKeys = import ./ssh-keys.nix;
