@@ -9,6 +9,11 @@ locals {
       proxied     = true
       description = "Pocket ID OIDC server"
     }
+    ts = {
+      proxied     = false # https://headscale.net/stable/ref/integration/reverse-proxy/#cloudflare
+      ttl         = 3600
+      description = "Headscale server"
+    }
   }
 }
 

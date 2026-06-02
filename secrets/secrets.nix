@@ -19,4 +19,8 @@ in
     dvcorreia
     lena
   ];
+  "headscale-oidc.age".publicKeys = [
+    dvcorreia
+    lena
+  ];
 }

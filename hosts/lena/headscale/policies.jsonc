@@ -1,0 +1,23 @@
+{
+	"acls": [
+		{
+			"action": "accept",
+			"src": ["autogroup:member"],
+			"dst": ["autogroup:self:*"] // all users can access their own devices
+		},
+		{
+			"action": "accept",
+			"src": ["autogroup:member"],
+			"dst": ["autogroup:internet:*"] // all users can reach the internet through the VPN
+		}
+	],
+
+	"ssh": [
+		{
+			"action": "check",
+			"src": ["autogroup:member"],
+			"dst": ["autogroup:self"],
+			"users": ["autogroup:nonroot", "root"] // all users can SSH into their own devices as any user
+		}
+	]
+}
