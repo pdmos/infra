@@ -21,8 +21,9 @@
 
   networking.hostName = "lena";
 
-  environment.systemPackages = [
-    pkgs.git
+  environment.systemPackages = with pkgs; [
+    git
+    ghostty # fixes 'xterm-ghostty': unknown terminal type
   ];
 
   users.users =
