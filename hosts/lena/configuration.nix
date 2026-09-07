@@ -33,6 +33,7 @@
     {
       root.openssh.authorizedKeys.keys = [
         sshKeys.dvcorreia-yubikey
+        sshKeys.afonso-yubikey
       ];
 
       dvcorreia = {
@@ -41,6 +42,16 @@
 
         openssh.authorizedKeys.keys = [
           sshKeys.dvcorreia
+        ];
+      };
+
+      afonso = {
+        isNormalUser = true;
+        extraGroups = [ "wheel" ];
+
+        openssh.authorizedKeys.keys = [
+          sshKeys.afonso
+          sshKeys.afonso-yubikey
         ];
       };
     };
