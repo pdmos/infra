@@ -14,6 +14,14 @@ locals {
       ttl         = 3600
       description = "Headscale server"
     }
+    matrix = {
+      proxied     = true
+      description = "Matrix homeserver (Synapse)"
+    }
+    chat = {
+      proxied     = true
+      description = "Element Web"
+    }
   }
 }
 
