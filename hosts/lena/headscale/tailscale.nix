@@ -1,7 +1,7 @@
 { ... }:
 {
   services.tailscale = {
-    enable = true;
+    enable = false; # TODO: needs headscale to be up
     openFirewall = true;
     useRoutingFeatures = "server";
     extraUpFlags = [

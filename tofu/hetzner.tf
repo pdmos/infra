@@ -7,7 +7,7 @@ resource "hcloud_ssh_key" "default" {
 # https://docs.hetzner.com/cloud/general/locations/#what-datacenters-are-there
 
 data "hcloud_datacenter" "frankfurt_datacenter" {
-  name = "fsn1-dc14"
+  name = "hel1-dc2"
 }
 
 # ----------- lena ----------- #
