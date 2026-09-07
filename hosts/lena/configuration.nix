@@ -14,6 +14,7 @@
     ./pocket-id.nix
     ./headscale
     ./websites
+    ./matrix
     inputs.srvos.nixosModules.server
     inputs.srvos.nixosModules.hardware-hetzner-cloud
     inputs.agenix.nixosModules.default
