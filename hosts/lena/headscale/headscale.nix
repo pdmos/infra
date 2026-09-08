@@ -13,7 +13,7 @@ in
   environment.systemPackages = with pkgs; [ headscale ];
 
   services.headscale = {
-    enable = false; # TODO: setup pocket-id again to set headscale-oidc.age
+    enable = true;
     address = "127.0.0.1";
     port = 8080;
 
