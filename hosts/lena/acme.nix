@@ -17,6 +17,8 @@
     recommendedProxySettings = true;
     recommendedTlsSettings = true;
     recommendedGzipSettings = true;
+
+    virtualHosts."pdmos.pt".locations."/".return = "404";
   };
 
   users.groups.acme = {
