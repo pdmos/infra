@@ -22,6 +22,12 @@ in
         disable_3pid_login = true;
         # Without federation, other servers' public room directories make no sense.
         room_directory.servers = [ "pdmos.pt" ];
+        # No integration manager (scalar.vector.im): no external widgets/bots.
+        integrations_ui_url = "";
+        integrations_rest_url = "";
+        integrations_widgets_urls = [ ];
+        # Registration is off on the homeserver; hide the button too.
+        setting_defaults."UIFeature.registration" = false;
         # Single IdP: keep the SSO button (set to true to skip straight to Pocket ID).
         sso_redirect_options.immediate = false;
         default_theme = "system";

@@ -95,6 +95,10 @@ in
       # Keep display name and avatar in sync with Pocket ID on every login.
       sso.update_profile_information = true;
 
+      # Closed server for a handful of people: everyone can find everyone in the
+      # user directory without having to share a room first.
+      user_directory.search_all_users = true;
+
       # Media: 7 people and 40 GB of disk. Without federation there is no remote cache.
       max_upload_size = "50M";
 

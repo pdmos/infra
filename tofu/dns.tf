@@ -15,7 +15,9 @@ locals {
       description = "Headscale server"
     }
     matrix = {
-      proxied     = true
+      # DNS-only: behind the Cloudflare proxy Synapse only sees Cloudflare IPs,
+      # so its per-IP rate limits would be shared by every user.
+      proxied     = false
       description = "Matrix homeserver (Synapse)"
     }
     chat = {
