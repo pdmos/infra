@@ -38,6 +38,7 @@ in
         pkce.enabled = true;
         allowed_users = [
           "dv_correia@hotmail.com"
+          "avjavj@proton.me"
         ];
       };
       policy.path = ./policies.jsonc;
@@ -47,6 +48,7 @@ in
   users.groups.${config.services.headscale.group}.members = [
     "nginx"
     "dvcorreia"
+    "afonso"
   ];
 
   services.nginx.virtualHosts.${domain} = {
