@@ -13,6 +13,7 @@
     ./acme.nix
     ./pocket-id.nix
     ./headscale
+    ./websites
     inputs.srvos.nixosModules.server
     inputs.srvos.nixosModules.hardware-hetzner-cloud
     inputs.agenix.nixosModules.default
