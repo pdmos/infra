@@ -35,8 +35,12 @@
       locations."/".proxyPass = "http://unix:${config.services.pocket-id.settings.UNIX_SOCKET}";
     };
 
-    "pdmos.pt".locations = {
-      "/.well-known/webfinger" =
+    "pdmos.pt" = {
+      addSSL = true;
+      enableACME = true;
+      serverAliases = [ "www.pdmos.pt" ];
+
+      locations."/.well-known/webfinger" =
         let
           response = builtins.toJSON {
             subject = "acct:dv_correia@hotmail.com";
