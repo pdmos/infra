@@ -1,23 +1,40 @@
 {
+	"tagOwners": {
+		"tag:pdmos": ["dv_correia@hotmail.com"]
+	},
+
 	"acls": [
+		// Allow users to connect to their own devices
 		{
 			"action": "accept",
 			"src": ["autogroup:member"],
-			"dst": ["autogroup:self:*"] // all users can access their own devices
+			"dst": ["autogroup:self:*"]
 		},
+		// Allow exit node traffic (internet access via exit nodes)
 		{
 			"action": "accept",
 			"src": ["autogroup:member"],
-			"dst": ["autogroup:internet:*"] // all users can reach the internet through the VPN
+			"dst": ["autogroup:internet:*"]
+		},
+		// Allow people to connect to pdmos shared hosts
+		{
+			"action": "accept",
+			"src": ["autogroup:member"],
+			"dst": ["tag:pdmos:*"]
 		}
 	],
 
+	"autoApprovers": {
+		"exitNode": ["tag:pdmos"]
+	},
+
 	"ssh": [
+		// Allow users to securely SSH into their own devices
 		{
 			"action": "check",
 			"src": ["autogroup:member"],
 			"dst": ["autogroup:self"],
-			"users": ["autogroup:nonroot", "root"] // all users can SSH into their own devices as any user
+			"users": ["autogroup:nonroot", "root"]
 		}
 	]
 }
