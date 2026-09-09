@@ -16,4 +16,5 @@ in
   "pocket-id.age".publicKeys = [ lena ] ++ admins;
   "headscale-oidc.age".publicKeys = [ lena ] ++ admins;
   "lena-tailscale-preauth-key.age".publicKeys = [ lena ] ++ admins;
+  "matrix-oidc.age".publicKeys = [ lena ] ++ admins;
 }
