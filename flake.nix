@@ -58,6 +58,12 @@
           };
 
           installationScript = agenix-shell.lib.installationScript system {
+            # Dedicated agenix key first (skipped when absent), then rage's defaults.
+            identityPaths = [
+              "$HOME/.ssh/pdmos_ed25519"
+              "$HOME/.ssh/id_ed25519"
+              "$HOME/.ssh/id_rsa"
+            ];
             secrets = {
               TF_VAR_hcloud_token.file = ./secrets/hetzner-api-token.age;
               TF_VAR_passphrase.file = ./secrets/opentofu-encryption-key.age;
