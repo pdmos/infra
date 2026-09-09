@@ -14,6 +14,16 @@ locals {
       ttl         = 3600
       description = "Headscale server"
     }
+    matrix = {
+      # DNS-only: behind the Cloudflare proxy Synapse only sees Cloudflare IPs,
+      # so its per-IP rate limits would be shared by every user.
+      proxied     = false
+      description = "Matrix homeserver (Synapse)"
+    }
+    chat = {
+      proxied     = true
+      description = "Element Web"
+    }
   }
 }
 
