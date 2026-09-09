@@ -29,7 +29,7 @@ in
     # Synapse requires a database with "C" collation. This script only runs on
     # the first initialisation of the PostgreSQL cluster.
     initialScript = pkgs.writeText "synapse-init.sql" ''
-      CREATE ROLE "matrix-synapse";
+      CREATE ROLE "matrix-synapse" WITH LOGIN;
       CREATE DATABASE "matrix-synapse" WITH OWNER "matrix-synapse"
         TEMPLATE template0
         LC_COLLATE = "C"
