@@ -55,6 +55,16 @@
           sshKeys.afonso-yubikey
         ];
       };
+
+      debug = {
+        isNormalUser = true;
+        extraGroups = [ "systemd-journal" ];
+
+        openssh.authorizedKeys.keys = [
+          sshKeys.dvcorreia
+          sshKeys.afonso
+        ];
+      };
     };
 
   services.openssh = {
