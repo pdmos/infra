@@ -80,6 +80,9 @@ in
       # Pocket ID is the only way in.
       passwords.enabled = false;
 
+      # Closed server: an account is not something you drop by misclicking.
+      account.account_deactivation_allowed = false;
+
       upstream_oauth2.providers = [
         {
           id = pocketId;
