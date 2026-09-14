@@ -6,9 +6,22 @@ let
   fqdn = "matrix.${serverName}";
   baseUrl = "https://${fqdn}";
 
-  # Served at https://pdmos.pt/.well-known/matrix/client — this is how Element X
-  # and other clients discover the homeserver from "pdmos.pt".
-  clientConfig."m.homeserver".base_url = baseUrl;
+  # Authentication is delegated to MAS; clients are pointed at it from here.
+  masBaseUrl = config.services.matrix-authentication-service.settings.http.public_base;
+  masEndpoint = "http://127.0.0.1:8080/";
+  # nginx rejects proxy_pass with a URI part in a regex location, and a trailing
+  # slash counts as one.
+  masUpstream = "http://127.0.0.1:8080";
+
+  # Served at https://pdmos.pt/.well-known/matrix/client — this is how clients
+  # discover both the homeserver and the authentication service from "pdmos.pt".
+  clientConfig = {
+    "m.homeserver".base_url = baseUrl;
+    "org.matrix.msc2965.authentication" = {
+      issuer = masBaseUrl;
+      account = "${masBaseUrl}account/";
+    };
+  };
 
   mkWellKnown = data: ''
     default_type application/json;
@@ -17,13 +30,6 @@ let
   '';
 in
 {
-  # Client secret of the "Matrix" application created in Pocket ID.
-  age.secrets.matrix-oidc = {
-    file = ../../../secrets/matrix-oidc.age;
-    owner = "matrix-synapse";
-    group = "matrix-synapse";
-  };
-
   services.postgresql = {
     enable = true;
     # Synapse requires a database with "C" collation. This script only runs on
@@ -66,34 +72,12 @@ in
       federation_domain_whitelist = [ ];
       allow_public_rooms_over_federation = false;
 
-      # Pocket ID is the only way in. No passwords, no open registration.
-      enable_registration = false;
-      password_config.enabled = false;
-
-      oidc_providers = [
-        {
-          idp_id = "pocket-id";
-          idp_name = "Fuas ID";
-          issuer = "https://id.pdmos.pt";
-          client_id = "matrix";
-          client_secret_path = config.age.secrets.matrix-oidc.path;
-          scopes = [
-            "openid"
-            "profile"
-            "email"
-          ];
-          # Creates the Matrix account on first login; the localpart comes from
-          # the Pocket ID username (Synapse normalises it to lowercase).
-          user_mapping_provider.config = {
-            localpart_template = "{{ user.preferred_username }}";
-            display_name_template = "{{ user.name }}";
-            email_template = "{{ user.email }}";
-          };
-        }
-      ];
-
-      # Keep display name and avatar in sync with Pocket ID on every login.
-      sso.update_profile_information = true;
+      # All authentication is handled by MAS: no local passwords, no OIDC here.
+      matrix_authentication_service = {
+        enabled = true;
+        endpoint = masEndpoint;
+        secret_path = config.age.secrets.mas-synapse-secret.path;
+      };
 
       # Closed server for a handful of people: everyone can find everyone in the
       # user directory without having to share a room first.
@@ -118,10 +102,14 @@ in
       locations."/".extraConfig = ''
         return 404;
       '';
+      # Login lives in MAS, not in Synapse. Regex locations are matched before
+      # the prefix ones below, so this wins for these three endpoints.
+      locations."~ ^/_matrix/client/(.*)/(login|logout|refresh)".proxyPass = masUpstream;
       # Matrix API (no trailing slash, on purpose).
       locations."/_matrix".proxyPass = "http://127.0.0.1:8008";
-      # SSO flow (the OIDC callback lands here).
       locations."/_synapse/client".proxyPass = "http://127.0.0.1:8008";
+      # Endpoints Synapse exposes for MAS itself.
+      locations."/_synapse/mas".proxyPass = "http://127.0.0.1:8008";
     };
 
     # Homeserver discovery lives on the root domain (vhost defined in

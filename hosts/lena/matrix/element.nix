@@ -28,8 +28,6 @@ in
         integrations_widgets_urls = [ ];
         # Registration is off on the homeserver; hide the button too.
         setting_defaults."UIFeature.registration" = false;
-        # Single IdP: keep the SSO button (set to true to skip straight to Pocket ID).
-        sso_redirect_options.immediate = false;
         default_theme = "system";
         show_labs_settings = false;
       };

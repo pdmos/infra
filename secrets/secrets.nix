@@ -17,4 +17,6 @@ in
   "headscale-oidc.age".publicKeys = [ lena ] ++ admins;
   "lena-tailscale-preauth-key.age".publicKeys = [ lena ] ++ admins;
   "matrix-oidc.age".publicKeys = [ lena ] ++ admins;
+  "mas-secrets.age".publicKeys = [ lena ] ++ admins;
+  "mas-synapse-secret.age".publicKeys = [ lena ] ++ admins;
 }

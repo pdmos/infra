@@ -24,6 +24,10 @@ locals {
       proxied     = true
       description = "Element Web"
     }
+    auth = {
+      proxied     = true
+      description = "Matrix Authentication Service"
+    }
   }
 }
 
