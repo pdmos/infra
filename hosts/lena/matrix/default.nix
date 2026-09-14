@@ -1,7 +1,6 @@
 { ... }:
 {
   imports = [
-    ./synapse.nix
-    ./element.nix
+    ./tuwunel.nix
   ];
 }
