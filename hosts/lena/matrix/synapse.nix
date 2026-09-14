@@ -8,10 +8,10 @@ let
 
   # Authentication is delegated to MAS; clients are pointed at it from here.
   masBaseUrl = config.services.matrix-authentication-service.settings.http.public_base;
-  masEndpoint = "http://127.0.0.1:8080/";
+  masEndpoint = "http://127.0.0.1:8090/";
   # nginx rejects proxy_pass with a URI part in a regex location, and a trailing
   # slash counts as one.
-  masUpstream = "http://127.0.0.1:8080";
+  masUpstream = "http://127.0.0.1:8090";
 
   # Served at https://pdmos.pt/.well-known/matrix/client — this is how clients
   # discover both the homeserver and the authentication service from "pdmos.pt".

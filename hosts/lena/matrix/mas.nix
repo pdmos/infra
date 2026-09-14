@@ -38,13 +38,14 @@ in
       http = {
         public_base = "https://${domain}/";
         # Behind nginx on this host; never bind to a public address.
+        # 8080/8081 belong to headscale, hence the 8090 range.
         listeners = [
           {
             name = "web";
             binds = [
               {
                 host = "127.0.0.1";
-                port = 8080;
+                port = 8090;
               }
             ];
             resources = [
@@ -61,7 +62,7 @@ in
             binds = [
               {
                 host = "127.0.0.1";
-                port = 8081;
+                port = 8091;
               }
             ];
             resources = [ { name = "health"; } ];
@@ -116,6 +117,6 @@ in
   services.nginx.virtualHosts.${domain} = {
     addSSL = true;
     enableACME = true;
-    locations."/".proxyPass = "http://127.0.0.1:8080";
+    locations."/".proxyPass = "http://127.0.0.1:8090";
   };
 }
