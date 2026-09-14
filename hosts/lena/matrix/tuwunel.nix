@@ -36,7 +36,13 @@ in
           "io.element.android"
         ];
 
-        well_known.client = "https://${domain}";
+        well_known = {
+          client = "https://${domain}";
+          support_contact.admin = {
+            role = "m.role.admin";
+            email_address = "dv_correia@hotmail.com";
+          };
+        };
 
         identity_provider = [
           {
@@ -76,18 +82,22 @@ in
       };
     };
 
-    ${serverName}.locations."= /.well-known/matrix/client" =
-      let
-        response = builtins.toJSON {
-          "m.homeserver".base_url = "https://${domain}";
+    ${serverName}.locations = {
+      "= /.well-known/matrix/client" =
+        let
+          response = builtins.toJSON {
+            "m.homeserver".base_url = "https://${domain}";
+          };
+        in
+        {
+          return = "200 '${response}'";
+          extraConfig = ''
+            default_type application/json;
+            add_header Access-Control-Allow-Origin *;
+          '';
         };
-      in
-      {
-        return = "200 '${response}'";
-        extraConfig = ''
-          default_type application/json;
-          add_header Access-Control-Allow-Origin *;
-        '';
-      };
+
+      "= /.well-known/matrix/support".proxyPass = "http://127.0.0.1:${toString port}";
+    };
   };
 }
