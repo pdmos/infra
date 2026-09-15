@@ -15,7 +15,7 @@ locals {
       description = "Headscale server"
     }
     matrix = {
-      proxied     = false
+      proxied     = true
       description = "Matrix homeserver (tuwunel)"
     }
   }
