@@ -15,15 +15,8 @@ locals {
       description = "Headscale server"
     }
     matrix = {
-      # Behind the Cloudflare proxy, Synapse only sees Cloudflare IPs,
-      # so its per-IP rate limits would be shared by every user.
-      # This is probably wrong and we can remove this.
-      proxied     = false
-      description = "Matrix homeserver (Synapse)"
-    }
-    chat = {
       proxied     = true
-      description = "Element Web"
+      description = "Matrix homeserver (tuwunel)"
     }
   }
 }
