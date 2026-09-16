@@ -31,10 +31,12 @@ in
         refresh_token_ttl = 259200;
         oidc_rc_per_second = 2;
         oidc_rc_burst_count = 10;
-        oidc_registration_allowed_redirect_hosts = [
-          "element.io"
-          "io.element.android"
-        ];
+
+        # TODO: Uncomment when tuwunel gets updated to v1.9.1
+        # oidc_registration_allowed_redirect_hosts = [
+        #   "element.io"
+        #   "io.element.android"
+        # ];
 
         well_known = {
           client = "https://${domain}";
