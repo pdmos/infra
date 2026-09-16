@@ -11,6 +11,7 @@
     ./disko.nix
     ./nix.nix
     ./acme.nix
+    ./mailserver.nix
     ./pocket-id.nix
     ./headscale
     ./websites
