@@ -31,6 +31,11 @@ in
         refresh_token_ttl = 259200;
         oidc_rc_per_second = 2;
         oidc_rc_burst_count = 10;
+        # Clients whose redirect target is listed here sign in without the
+        # approval page; anything else is shown to the user first
+        # (oidc_require_client_approval, default true). Element X iOS redirects
+        # to https://element.io/..., Android to the private-use scheme
+        # io.element.android:/ (needs tuwunel >= 1.9.1, see overlays/patches.nix).
         oidc_registration_allowed_redirect_hosts = [
           "element.io"
           "io.element.android"

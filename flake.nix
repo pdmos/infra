@@ -43,6 +43,8 @@
         specialArgs = { inherit inputs; };
       };
 
+      overlays.patches = import ./overlays/patches.nix;
+
       formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
 
       sshKeys = import ./ssh-keys.nix;

@@ -23,6 +23,8 @@
 
   networking.hostName = "lena";
 
+  nixpkgs.overlays = [ inputs.self.overlays.patches ];
+
   environment.systemPackages = with pkgs; [
     git
     ghostty # fixes 'xterm-ghostty': unknown terminal type
