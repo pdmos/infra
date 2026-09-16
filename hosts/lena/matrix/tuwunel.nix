@@ -1,4 +1,9 @@
-{ config, ... }:
+{
+  config,
+  pkgs,
+  inputs,
+  ...
+}:
 let
   serverName = "pdmos.pt";
   domain = "matrix.${serverName}";
@@ -13,6 +18,9 @@ in
 
   services.matrix-tuwunel = {
     enable = true;
+    # 1.9.1 accepts private-use redirect schemes in the registration allowlist
+    # (Element X Android). Drop together with the nixpkgs-tuwunel input.
+    package = inputs.nixpkgs-tuwunel.legacyPackages.${pkgs.stdenv.hostPlatform.system}.matrix-tuwunel;
     settings = {
       global = {
         server_name = serverName;
@@ -31,12 +39,10 @@ in
         refresh_token_ttl = 259200;
         oidc_rc_per_second = 2;
         oidc_rc_burst_count = 10;
-
-        # TODO: Uncomment when tuwunel gets updated to v1.9.1
-        # oidc_registration_allowed_redirect_hosts = [
-        #   "element.io"
-        #   "io.element.android"
-        # ];
+        oidc_registration_allowed_redirect_hosts = [
+          "element.io"
+          "io.element.android"
+        ];
 
         well_known = {
           client = "https://${domain}";

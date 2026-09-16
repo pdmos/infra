@@ -2,6 +2,10 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
 
+    # matrix-tuwunel 1.9.1 from the pending nixpkgs update (NixOS/nixpkgs#562613).
+    # Drop once nixos-26.05 ships >= 1.9.1.
+    nixpkgs-tuwunel.url = "github:nixos/nixpkgs/e41b3b0baca594419e0faadd909032f6ac0cd1f9";
+
     agenix = {
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
