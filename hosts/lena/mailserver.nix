@@ -1,16 +1,27 @@
-{ inputs, config, ... }:
+{
+  inputs,
+  config,
+  lib,
+  ...
+}:
+let
+  admins = [
+    "diogo@pdmos.pt"
+    "afonsojanuario@pdmos.pt"
+  ];
+in
 {
   imports = [
     inputs.nixos-mailserver.nixosModules.default
   ];
 
-  age.secrets = {
-    mailserver-diogo-password = {
-      file = ../../secrets/mailserver-diogo-password.age;
-      owner = config.mailserver.storage.owner;
-      group = config.mailserver.storage.group;
-    };
-  };
+  age.secrets =
+    lib.genAttrs [ "mailserver-diogo-password" "mailserver-afonsojanuario-password" ]
+      (name: {
+        file = ../../secrets/${name}.age;
+        owner = config.mailserver.storage.owner;
+        group = config.mailserver.storage.group;
+      });
 
   mailserver = {
     enable = true;
@@ -38,12 +49,12 @@
 
     accounts = {
       "diogo@pdmos.pt".hashedPasswordFile = config.age.secrets.mailserver-diogo-password.path;
+      "afonsojanuario@pdmos.pt".hashedPasswordFile =
+        config.age.secrets.mailserver-afonsojanuario-password.path;
     };
 
-    aliases = {
-      "postmaster@pdmos.pt" = "diogo@pdmos.pt";
-      "abuse@pdmos.pt" = "diogo@pdmos.pt";
-    };
+    # postmaster@ and abuse@ are delivered to every admin mailbox
+    aliases = lib.genAttrs [ "postmaster@pdmos.pt" "abuse@pdmos.pt" ] (_: admins);
   };
 
   services.nginx.virtualHosts.${config.mailserver.fqdn} = {
