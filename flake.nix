@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs?ref=nixos-unstable";
 
     agenix = {
       url = "github:ryantm/agenix";
@@ -28,6 +29,7 @@
     {
       self,
       nixpkgs,
+      nixpkgs-unstable,
       agenix,
       agenix-shell,
       ...
@@ -42,6 +44,14 @@
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
     in
     {
+      # when applied, the unstable nixpkgs set will
+      # be accessible through 'pkgs.unstable'
+      overlays.unstable-packages = final: _prev: {
+        unstable = import nixpkgs-unstable {
+          system = final.stdenv.hostPlatform.system;
+        };
+      };
+
       nixosConfigurations.lena = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
         modules = [ ./hosts/lena/configuration.nix ];

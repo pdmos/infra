@@ -1,4 +1,9 @@
-{ config, ... }:
+{
+  config,
+  pkgs,
+  ...
+}:
+
 let
   serverName = "pdmos.pt";
   domain = "matrix.${serverName}";
@@ -13,6 +18,8 @@ in
 
   services.matrix-tuwunel = {
     enable = true;
+    package = pkgs.unstable.matrix-tuwunel;
+
     settings = {
       global = {
         server_name = serverName;
@@ -31,17 +38,16 @@ in
         # tuwunel appends 💕 to every new displayname by default
         new_user_displayname_suffix = "";
 
-        access_token_ttl = 7 * 24 * 3600;  # (default)
+        access_token_ttl = 7 * 24 * 3600; # (default)
         refresh_token_ttl = 14 * 24 * 3600;
 
         oidc_rc_per_second = 2;
         oidc_rc_burst_count = 10;
 
-        # TODO: Uncomment when tuwunel gets updated to v1.9.1
-        # oidc_registration_allowed_redirect_hosts = [
-        #   "element.io"
-        #   "io.element.android"
-        # ];
+        oidc_registration_allowed_redirect_hosts = [
+          "element.io"
+          "io.element.android"
+        ];
 
         well_known = {
           client = "https://${domain}";

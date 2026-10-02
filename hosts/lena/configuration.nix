@@ -22,6 +22,10 @@
     inputs.disko.nixosModules.disko
   ];
 
+  nixpkgs.overlays = [
+    inputs.self.overlays.unstable-packages
+  ];
+
   networking.hostName = "lena";
 
   environment.systemPackages = with pkgs; [
