@@ -1,5 +1,6 @@
 {
   dvcorreia = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG4eQf9kO/8ylzg+wDmNSbe5ubhJ23XvmcKGbYKlPhw5 dv_correia@hotmail.com";
+  dvcorreia-work = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAsl/24Ulgv+lRkdQWLzO/haRiHu1TuFMO+hE09shxcc dvcorreia@SE1K1W42D0C36 (diogo.correia@siemens.com)";
   dvcorreia-yubikey = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIOFxsrj7vbKLYKqdApEGMbJWoGl77eS+ACQC/vKKWHYJAAAABHNzaDo= dv_correia@hotmail.com";
 
   afonso = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGX/essD2Oa5wcy68jRQvokEZcmqLUJnONU1jeuj3yQd avjavj@proton.me";

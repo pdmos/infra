@@ -45,6 +45,7 @@
 
         openssh.authorizedKeys.keys = [
           sshKeys.dvcorreia
+          sshKeys.dvcorreia-work
         ];
       };
 
