@@ -17,6 +17,8 @@ in
   "headscale-oidc.age".publicKeys = [ lena ] ++ admins;
   "lena-tailscale-preauth-key.age".publicKeys = [ lena ] ++ admins;
   "matrix-oidc.age".publicKeys = [ lena ] ++ admins;
+  "grafana-secret-key.age".publicKeys = [ lena ] ++ admins;
+  "grafana-oauth2-client-secret.age".publicKeys = [ lena ] ++ admins;
   "mailserver-diogo-password.age".publicKeys = [ lena ] ++ admins;
   "mailserver-afonsojanuario-password.age".publicKeys = [ lena ] ++ admins;
 }

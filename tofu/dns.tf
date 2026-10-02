@@ -9,6 +9,10 @@ locals {
       proxied     = true
       description = "Pocket ID OIDC server"
     }
+    monitor = {
+      proxied     = true
+      description = "Grafana monitoring dashboard"
+    }
     ts = {
       proxied     = false # https://headscale.net/stable/ref/integration/reverse-proxy/#cloudflare
       ttl         = 3600
