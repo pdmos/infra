@@ -31,7 +31,9 @@ in
         # tuwunel appends 💕 to every new displayname by default
         new_user_displayname_suffix = "";
 
-        refresh_token_ttl = 259200;
+        access_token_ttl = 7 * 24 * 3600;  # (default)
+        refresh_token_ttl = 14 * 24 * 3600;
+
         oidc_rc_per_second = 2;
         oidc_rc_burst_count = 10;
 
