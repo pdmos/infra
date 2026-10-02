@@ -13,6 +13,7 @@
     ./acme.nix
     ./mailserver.nix
     ./pocket-id.nix
+    ./prometheus.nix
     ./headscale
     ./websites
     ./matrix
