@@ -51,7 +51,7 @@ in
         token_url = "${pocket-id.settings.APP_URL}/api/oidc/token";
         api_url = "${pocket-id.settings.APP_URL}/api/oidc/userinfo";
         use_pkce = true;
-        role_attribute_path = "contains(groups[*], 'admin') && 'Editor' || 'Viewer'";
+        role_attribute_path = "contains(groups[*], 'admin') && 'Admin' || 'Viewer'";
       };
     };
 
