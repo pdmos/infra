@@ -1,7 +1,7 @@
 { config, ... }:
 
 let
-  inherit (config.services) pocket-id prometheus grafana;
+  inherit (config.services) pocket-id grafana;
 in
 {
   age.secrets.grafana-secret-key = {
@@ -55,18 +55,28 @@ in
       };
     };
 
-    provision = {
-      enable = true;
-      datasources.settings.datasources = [
-        {
-          name = "prometheus (lena)";
-          type = "prometheus";
-          url = "http://${prometheus.listenAddress}:${toString prometheus.port}";
-          isDefault = true;
-          editable = false; # (default)
-        }
-      ];
-    };
+    provision =
+      let
+        inherit (config.services) prometheus loki;
+      in
+      {
+        enable = true;
+        datasources.settings.datasources = [
+          {
+            name = "prometheus (lena)";
+            type = "prometheus";
+            url = "http://${prometheus.listenAddress}:${toString prometheus.port}";
+            isDefault = true;
+            editable = false; # (default)
+          }
+          {
+            name = "loki (lena)";
+            type = "loki";
+            url = "http://${loki.configuration.server.http_listen_address}:${toString loki.configuration.server.http_listen_port}";
+            editable = false;
+          }
+        ];
+      };
   };
 
   services.nginx.virtualHosts.${grafana.settings.server.domain} = {
