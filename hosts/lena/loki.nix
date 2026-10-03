@@ -56,13 +56,25 @@ in
       forward_to = []
 
       rule {
+        target_label = "job"
+        replacement  = "journal"
+      }
+
+      rule {
         source_labels = ["__journal__systemd_unit"]
+        regex         = "(.+\\.service)"
         target_label  = "unit"
+      }
+
+      rule {
+        source_labels = ["__journal__systemd_unit"]
+        regex         = "(.+)\\.service"
+        target_label  = "service_name"
       }
     }
 
     loki.source.journal "systemd" {
-      labels        = {host = "${config.networking.hostName}"}
+      labels        = {host = "${config.networking.hostName}", service_name = "system"}
       max_age       = "12h"
       relabel_rules = loki.relabel.journal.rules
       forward_to    = [loki.write.local.receiver]
@@ -70,7 +82,7 @@ in
 
     loki.source.file "nginx" {
       targets = [
-        {__path__ = "/var/log/nginx/access.log", job = "nginx", host = "${config.networking.hostName}"},
+        {__path__ = "/var/log/nginx/access.log", job = "nginx-access", service_name = "nginx", host = "${config.networking.hostName}"},
       ]
       tail_from_end = true
       forward_to    = [loki.write.local.receiver]
