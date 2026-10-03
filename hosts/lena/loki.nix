@@ -50,6 +50,7 @@ in
   };
 
   services.alloy.enable = true;
+  systemd.services.alloy.serviceConfig.SupplementaryGroups = [ config.services.nginx.group ];
   environment.etc."alloy/config.alloy".text = ''
     loki.relabel "journal" {
       forward_to = []
@@ -65,6 +66,18 @@ in
       max_age       = "12h"
       relabel_rules = loki.relabel.journal.rules
       forward_to    = [loki.write.local.receiver]
+    }
+
+    loki.source.file "nginx" {
+      targets = [
+        {__path__ = "/var/log/nginx/access.log", job = "nginx", host = "${config.networking.hostName}"},
+      ]
+      tail_from_end = true
+      forward_to    = [loki.write.local.receiver]
+
+      file_match {
+        enabled = true
+      }
     }
 
     loki.write "local" {
