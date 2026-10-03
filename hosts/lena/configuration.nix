@@ -15,6 +15,7 @@
     ./pocket-id.nix
     ./prometheus.nix
     ./grafana.nix
+    ./loki.nix
     ./headscale
     ./websites
     ./matrix

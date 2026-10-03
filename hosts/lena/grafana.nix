@@ -1,7 +1,7 @@
 { config, ... }:
 
 let
-  inherit (config.services) pocket-id prometheus grafana;
+  inherit (config.services) pocket-id grafana;
 in
 {
   age.secrets.grafana-secret-key = {
@@ -39,6 +39,7 @@ in
       };
 
       auth.disable_login_form = true;
+      "auth.basic".enabled = false;
       "auth.generic_oauth" = {
         enabled = true;
         name = pocket-id.settings.APP_NAME;
@@ -50,22 +51,32 @@ in
         token_url = "${pocket-id.settings.APP_URL}/api/oidc/token";
         api_url = "${pocket-id.settings.APP_URL}/api/oidc/userinfo";
         use_pkce = true;
-        role_attribute_path = "contains(groups[*], 'admin') && 'Editor' || 'Viewer'";
+        role_attribute_path = "contains(groups[*], 'admin') && 'Admin' || 'Viewer'";
       };
     };
 
-    provision = {
-      enable = true;
-      datasources.settings.datasources = [
-        {
-          name = "prometheus (lena)";
-          type = "prometheus";
-          url = "http://${prometheus.listenAddress}:${toString prometheus.port}";
-          isDefault = true;
-          editable = false; # (default)
-        }
-      ];
-    };
+    provision =
+      let
+        inherit (config.services) prometheus loki;
+      in
+      {
+        enable = true;
+        datasources.settings.datasources = [
+          {
+            name = "prometheus (lena)";
+            type = "prometheus";
+            url = "http://${prometheus.listenAddress}:${toString prometheus.port}";
+            isDefault = true;
+            editable = false; # (default)
+          }
+          {
+            name = "loki (lena)";
+            type = "loki";
+            url = "http://${loki.configuration.server.http_listen_address}:${toString loki.configuration.server.http_listen_port}";
+            editable = false;
+          }
+        ];
+      };
   };
 
   services.nginx.virtualHosts.${grafana.settings.server.domain} = {
