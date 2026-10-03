@@ -39,6 +39,7 @@ in
       };
 
       auth.disable_login_form = true;
+      "auth.basic".enabled = false;
       "auth.generic_oauth" = {
         enabled = true;
         name = pocket-id.settings.APP_NAME;
