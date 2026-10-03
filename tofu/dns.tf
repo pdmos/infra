@@ -6,7 +6,8 @@ locals {
   pdmos_pt_domain = "pdmos.pt"
   pdmos_pt_subdomains = {
     id = {
-      proxied     = true
+      proxied     = false
+      ttl         = 3600
       description = "Pocket ID OIDC server"
     }
     monitor = {
@@ -19,7 +20,8 @@ locals {
       description = "Headscale server"
     }
     matrix = {
-      proxied     = true
+      proxied     = false
+      ttl         = 3600
       description = "Matrix homeserver (tuwunel)"
     }
     mail = {
