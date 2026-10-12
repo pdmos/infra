@@ -13,6 +13,7 @@
     ./acme.nix
     ./mailserver.nix
     ./pocket-id.nix
+    ./komga.nix
     ./prometheus.nix
     ./grafana.nix
     ./loki.nix
