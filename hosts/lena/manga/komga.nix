@@ -16,7 +16,7 @@ in
   ];
 
   age.secrets.komga-oidc = {
-    file = ../../secrets/komga-oidc.age;
+    file = ../../../secrets/komga-oidc.age;
     owner = config.services.komga.user;
     group = config.services.komga.group;
   };
@@ -24,7 +24,7 @@ in
   services.komga = {
     enable = true;
     settings = {
-      komga.oauth2-account-creation = false;
+      komga.oauth2-account-creation = true;
 
       spring.config.import = "file:${config.age.secrets.komga-oidc.path}[.properties]";
 
@@ -53,6 +53,7 @@ in
   };
 
   systemd.tmpfiles.rules = [
+    # feed subdirectories (owned group komga) are created by services.nyaa-si
     "d /srv/manga 0750 komga komga - -"
   ];
 
