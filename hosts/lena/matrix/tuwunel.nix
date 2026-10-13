@@ -30,7 +30,7 @@ in
 
         allow_federation = false;
         allow_registration = false;
-        login_with_password = false;
+        login_with_password = true;
         login_via_existing_session = false;
         require_auth_for_profile_requests = true;
         show_all_local_users_in_user_directory = true;

@@ -36,6 +36,7 @@ let
 in
 {
   age.secrets.komf-komga-password.file = ../../../secrets/komf-komga-password.age;
+  age.secrets.komf-matrix-apprise-url.file = ../../../secrets/komf-matrix-apprise-url.age;
 
   virtualisation.oci-containers.containers.komf = {
     image = "docker.io/sndxr/komf:2.1.0@sha256:373580779e2e75d4e00e2f05859f789e05691c54600ca83d1cb528f0aad1f7b6";
@@ -45,12 +46,14 @@ in
       "${settings}:/config/application.yml:ro"
       "/var/lib/komf:/data"
       "${config.age.secrets.komf-komga-password.path}:/run/secrets/komga-password:ro"
+      "${config.age.secrets.komf-matrix-apprise-url.path}:/run/secrets/matrix-apprise-url:ro"
     ];
     entrypoint = "/bin/sh";
     cmd = [
       "-c"
       ''
         export KOMF_KOMGA_PASSWORD="$(cat /run/secrets/komga-password)"
+        export KOMF_APPRISE_URLS="$(cat /run/secrets/matrix-apprise-url)"
         exec java -jar /app/komf-app-1.0.0-SNAPSHOT-all.jar
       ''
     ];
