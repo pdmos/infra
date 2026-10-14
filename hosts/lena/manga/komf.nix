@@ -10,6 +10,10 @@ let
       metadataUpdate:
         default:
           libraryType: MANGA
+          # Keep COMIC_INFO out of updateModes: it makes Komf write ComicInfo.xml
+          # into the book archives, and Transmission silently truncates any file
+          # larger than its torrent's declared size the next time it opens it
+          # (even just to serve a peer), corrupting the archive.
           updateModes: [API]
           aggregate: true
           seriesCovers: true

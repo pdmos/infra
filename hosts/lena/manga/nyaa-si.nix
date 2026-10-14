@@ -149,6 +149,14 @@ in
         rpc-authentication-required = false;
         rpc-whitelist-enabled = true;
         rpc-whitelist = "127.0.0.1";
+
+        # Seed fairly without becoming a long-term host: stop once the swarm
+        # has been quiet for two hours, or once we have given back twice what
+        # we downloaded. Torrents are paused; files stay in place for Komga.
+        idle-seeding-limit = 120; # minutes without peer activity
+        idle-seeding-limit-enabled = true;
+        ratio-limit = 2.0;
+        ratio-limit-enabled = true;
       };
     };
 
