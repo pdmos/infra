@@ -31,6 +31,8 @@ let
         mangaDex:
           enabled: true
           priority: 20
+    notifications:
+      templatesDirectory: /templates
     database:
       file: /data/database.sqlite
     server:
@@ -48,6 +50,7 @@ in
     environment.KOMF_CONFIG_DIR = "/config/application.yml";
     volumes = [
       "${settings}:/config/application.yml:ro"
+      "${./templates}:/templates:ro"
       "/var/lib/komf:/data"
       "${config.age.secrets.komf-komga-password.path}:/run/secrets/komga-password:ro"
       "${config.age.secrets.komf-matrix-apprise-url.path}:/run/secrets/matrix-apprise-url:ro"

@@ -1,0 +1,4 @@
+#foreach ($book in $books)
+${book.name}
+https://manga.pdmos.pt/book/${book.id}
+#end
