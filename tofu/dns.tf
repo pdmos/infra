@@ -13,6 +13,10 @@ locals {
       proxied     = true
       description = "Grafana monitoring dashboard"
     }
+    manga = {
+      proxied     = true
+      description = "Komga manga server"
+    }
     ts = {
       proxied     = false # https://headscale.net/stable/ref/integration/reverse-proxy/#cloudflare
       ttl         = 3600
