@@ -122,9 +122,7 @@ in
     systemd.tmpfiles.rules = [
       "d /var/lib/flexget 0750 flexget flexget - -"
     ]
-    # setgid + group-write so Transmission can add files that the group can read.
-    # The parent directories need not exist beforehand; tmpfiles creates them.
-    # The quoting is required: tmpfiles splits fields on whitespace.
+    # setgid and group-write so Transmission can add files that the group can read.
     ++ map (feed: "d \"${feed.path}\" 2770 ${config.services.transmission.user} ${cfg.group} - -") (
       lib.attrValues cfg.feeds
     );
@@ -134,9 +132,7 @@ in
       user = "flexget";
       homeDir = "/var/lib/flexget";
       interval = cfg.interval;
-      # lib.generators.toYAML is an alias for toJSON, so this renders the tasks
-      # as a flow mapping. It must stay nested under the block key `tasks`: the
-      # flexget module appends `schedules: no`, which would start a second YAML
+      # The flexget module appends `schedules: no`, which would start a second YAML
       # document if our config were the root flow mapping.
       config = "tasks: " + lib.generators.toYAML { } flexgetConfig.tasks;
     };
@@ -145,14 +141,10 @@ in
       enable = true;
       inherit (cfg) group;
       settings = {
-        # Localhost RPC used by FlexGet.
         rpc-authentication-required = false;
         rpc-whitelist-enabled = true;
         rpc-whitelist = "127.0.0.1";
 
-        # Seed fairly without becoming a long-term host: stop once the swarm
-        # has been quiet for two hours, or once we have given back twice what
-        # we downloaded. Torrents are paused; files stay in place for Komga.
         idle-seeding-limit = 120; # minutes without peer activity
         idle-seeding-limit-enabled = true;
         ratio-limit = 2.0;
