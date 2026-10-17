@@ -47,6 +47,8 @@ in
         oidc_registration_allowed_redirect_hosts = [
           "element.io"
           "io.element.android"
+          "im.fluffychat.auth"
+          "im.fluffychat"
         ];
 
         well_known = {
