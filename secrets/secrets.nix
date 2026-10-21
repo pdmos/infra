@@ -24,4 +24,6 @@ in
   "komf-matrix-apprise-url.age".publicKeys = [ lena ] ++ admins;
   "mailserver-diogo-password.age".publicKeys = [ lena ] ++ admins;
   "mailserver-afonsojanuario-password.age".publicKeys = [ lena ] ++ admins;
+  "jayvala-matrix-password.age".publicKeys = [ lena ] ++ admins;
+  "jayvala-llm-api-key.age".publicKeys = [ lena ] ++ admins;
 }
