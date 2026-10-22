@@ -8,7 +8,7 @@ in
   services.nginx.virtualHosts."pdmos.pt" = {
     addSSL = true;
     enableACME = true;
-    root = ./pdmos_pt/www;
+    root = ../../../site;
     locations."/".extraConfig = ''
       ssi on;
       add_header Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
@@ -38,7 +38,7 @@ in
       Group = "pdmos-site";
       StateDirectory = "pdmos-site";
       StateDirectoryMode = "0755";
-      ExecStart = "${pkgs.python3.interpreter} ${./pdmos_pt/agenda.py} --url ${feed} --out ${stateDir}";
+      ExecStart = "${pkgs.python3.interpreter} ${./agenda.py} --url ${feed} --out ${stateDir}";
     };
   };
 
