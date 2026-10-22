@@ -10,10 +10,9 @@ import html
 import os
 import sys
 import tempfile
-import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -35,14 +34,14 @@ def events(feed: bytes, today: date):
             continue
         try:
             start = parsedate_to_datetime(raw).astimezone(TZ)
-        except (TypeError, ValueError):
+        except ValueError:
             continue
         if today <= start.date() < today + timedelta(days=DAYS):
             out.append((start, title, link))
     return sorted(out)
 
 
-def when(start, today):
+def when(start: datetime, today: date) -> str:
     d = start.date()
     label = {today: "hoje", today + timedelta(days=1): "amanhã"}.get(d, WEEKDAYS[d.weekday()])
     # 00:00 means the feed has no time for the event
@@ -51,7 +50,7 @@ def when(start, today):
     return label
 
 
-def render(evs, today):
+def render(evs, today: date) -> str:
     if not evs:
         return '<p class="vazio">Nada marcado para os próximos 30 dias.</p>\n'
     rows = [
@@ -67,45 +66,29 @@ def write_atomic(path: Path, data: bytes):
     fd, tmp = tempfile.mkstemp(dir=path.parent)
     with os.fdopen(fd, "wb") as f:
         f.write(data)
-    os.chmod(tmp, 0o644)
+    os.chmod(tmp, 0o644)  # mkstemp creates 0600; nginx reads the result as another user
     os.replace(tmp, path)
 
 
 def fetch(url: str, state: Path) -> bytes:
-    """Fetch the feed with If-None-Match; fall back to the cached copy on any error."""
-    feed, etag = state / "feed.xml", state / "etag"
+    """Download the feed; on any failure fall back to the last good copy."""
+    cache = state / "feed.xml"
     req = urllib.request.Request(url, headers={"User-Agent": "pdmos.pt agenda"})
-    if feed.exists() and etag.exists():
-        req.add_header("If-None-Match", etag.read_text().strip())
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             body = r.read()
-            ET.fromstring(body)  # never cache a broken feed
-            write_atomic(feed, body)
-            if tag := r.headers.get("ETag"):
-                write_atomic(etag, tag.encode())
-    except urllib.error.HTTPError as e:
-        if e.code != 304:
-            print(f"feed: HTTP {e.code}, using cached copy", file=sys.stderr)
-    except (urllib.error.URLError, ET.ParseError, TimeoutError) as e:
+        ET.fromstring(body)  # never cache a broken feed
+        write_atomic(cache, body)
+    except (OSError, ET.ParseError) as e:
         print(f"feed: {e}, using cached copy", file=sys.stderr)
-    if not feed.exists():
-        sys.exit("feed: no cached copy available")
-    return feed.read_bytes()
+    return cache.read_bytes()
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("feed", nargs="?", help="local RSS file; prints the fragment to stdout")
-    p.add_argument("--url", help="feed URL; requires --out")
-    p.add_argument("--out", type=Path, help="state directory for feed.xml, etag and agenda.html")
+    p.add_argument("--url", required=True, help="feed URL (file:// works for testing)")
+    p.add_argument("--out", required=True, type=Path, help="directory for feed.xml and agenda.html")
     p.add_argument("--today", type=date.fromisoformat)
     a = p.parse_args()
-    today = a.today or date.today()
-    if a.url and a.out:
-        write_atomic(a.out / "agenda.html", render(events(fetch(a.url, a.out), today), today).encode())
-    elif a.feed:
-        with open(a.feed, "rb") as f:
-            sys.stdout.write(render(events(f.read(), today), today))
-    else:
-        p.error("give a feed file, or --url and --out")
+    today = a.today or datetime.now(TZ).date()
+    write_atomic(a.out / "agenda.html", render(events(fetch(a.url, a.out), today), today).encode())
