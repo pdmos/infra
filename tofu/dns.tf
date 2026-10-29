@@ -26,6 +26,10 @@ locals {
       proxied     = true
       description = "Matrix homeserver (tuwunel)"
     }
+    rtc = {
+      proxied     = true
+      description = "MatrixRTC backend (LiveKit SFU + JWT service)"
+    }
     mail = {
       proxied     = false
       ttl         = 3600
