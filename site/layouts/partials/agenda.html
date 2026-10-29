@@ -1,0 +1,56 @@
+{{- /* Events from the town hall feed for the next 30 days. The feed uses pubDate as the
+       event start, not the publication date. Only title, link and pubDate are used:
+       description carries remote images and inline styles that the CSP blocks. */ -}}
+{{- $url := "https://www.municipio-portodemos.pt/pages/322.rss" -}}
+{{- $origin := "https://www.municipio-portodemos.pt/" -}}
+{{- $tz := "Europe/Lisbon" -}}
+{{- $weekdays := dict "Monday" "seg" "Tuesday" "ter" "Wednesday" "qua" "Thursday" "qui" "Friday" "sex" "Saturday" "sáb" "Sunday" "dom" -}}
+{{- $months := dict "January" "jan" "February" "fev" "March" "mar" "April" "abr" "May" "mai" "June" "jun" "July" "jul" "August" "ago" "September" "set" "October" "out" "November" "nov" "December" "dez" -}}
+
+{{- $items := slice -}}
+{{- with try (resources.GetRemote $url (dict "headers" (dict "User-Agent" "pdmos.pt agenda"))) -}}
+  {{- with .Err -}}
+    {{- errorf "agenda: %s" . -}}
+  {{- else with .Value -}}
+    {{- $items = (.Content | transform.Unmarshal).channel.item -}}
+  {{- else -}}
+    {{- errorf "agenda: %s not found" $url -}}
+  {{- end -}}
+{{- end -}}
+{{- /* A feed with a single item unmarshals to a map instead of a list */ -}}
+{{- if not (reflect.IsSlice $items) -}}{{- $items = slice $items -}}{{- end -}}
+
+{{- $today := time.AsTime ((now | time.In $tz).Format "2006-01-02") $tz -}}
+{{- $tomorrow := $today.AddDate 0 0 1 -}}
+{{- $end := $today.AddDate 0 0 30 -}}
+{{- $events := slice -}}
+{{- range $items -}}
+  {{- $item := . -}}
+  {{- $link := .link | default "" -}}
+  {{- if and .title .pubDate (hasPrefix $link $origin) -}}
+    {{- with (try (time.AsTime .pubDate)).Value -}}
+      {{- $start := . | time.In $tz -}}
+      {{- if and (not ($start.Before $today)) ($start.Before $end) -}}
+        {{- $key := printf "%s %s" ($start.Format "2006-01-02T15:04") $item.title -}}
+        {{- $events = $events | append (dict "key" $key "start" $start "title" $item.title "link" $link) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if $events }}
+<ol class="eventos">
+{{- range sort $events "key" }}
+{{- $s := .start -}}
+{{- $day := $s.Format "2006-01-02" -}}
+{{- $when := index $weekdays $s.Weekday.String -}}
+{{- if eq $day ($today.Format "2006-01-02") }}{{ $when = "hoje" }}
+{{- else if eq $day ($tomorrow.Format "2006-01-02") }}{{ $when = "amanhã" }}{{ end -}}
+{{- /* 00:00 means the feed has no time for the event */ -}}
+{{- if or $s.Hour $s.Minute }}{{ $when = printf "%s · %dh%02d" $when $s.Hour $s.Minute }}{{ end }}
+<li><a href="{{ .link }}"><time datetime="{{ $s.Format "2006-01-02T15:04:05-07:00" }}"><b>{{ $s.Day }}</b>{{ index $months $s.Month.String }}</time><span><small>{{ $when }}</small>{{ .title }}</span></a></li>
+{{- end }}
+</ol>
+{{- else }}
+<p class="vazio">Nada marcado para os próximos 30 dias.</p>
+{{- end }}
