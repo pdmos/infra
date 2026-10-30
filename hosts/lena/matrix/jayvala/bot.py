@@ -1,13 +1,15 @@
 """Jay Vala — a fictional mayor of Porto de Mós who lives in our Matrix rooms.
 
 Two jobs:
-  * every morning, read the municipality's events feed and announce whatever
-    starts today, in the voice of a small-town mayor;
+  * every morning, announce whatever starts today in his own municipality, in
+    the voice of a small-town mayor;
   * reply, in character, when someone mentions him. The reply prompt carries
-    the upcoming agenda from the same feed so answers stay factual.
+    the upcoming agenda of the whole region so answers stay factual.
 
-Configuration comes from environment variables (see jayvala.nix); secrets come
-from systemd credentials.
+Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
+the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), Leiria's
+agenda site and the programme of Leiria's municipal theatres (both HTML).
+Secrets come from systemd credentials.
 """
 
 import asyncio
@@ -22,11 +24,13 @@ import random
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import zoneinfo
 from pathlib import Path
 
+from bs4 import BeautifulSoup
 from nio import (
     AsyncClient,
     AsyncClientConfig,
@@ -43,7 +47,7 @@ log = logging.getLogger("jayvala")
 HOMESERVER = os.environ["JAYVALA_HOMESERVER"]
 USER_ID = os.environ["JAYVALA_USER"]
 ROOM = os.environ["JAYVALA_ROOM"]
-RSS_URL = os.environ["JAYVALA_RSS_URL"]
+SOURCES = json.loads(os.environ["JAYVALA_SOURCES"])
 LLM_URL = os.environ["JAYVALA_LLM_URL"]
 LLM_MODEL = os.environ["JAYVALA_LLM_MODEL"]
 POST_HOUR = int(os.environ.get("JAYVALA_POST_HOUR", "9"))
@@ -54,18 +58,23 @@ STATE_DIR = Path(os.environ["STATE_DIRECTORY"])
 CRED_DIR = Path(os.environ["CREDENTIALS_DIRECTORY"])
 SESSION_FILE = STATE_DIR / "session.json"
 STATE_FILE = STATE_DIR / "state.json"
-FEED_FILE = STATE_DIR / "feed.xml"
-ETAG_FILE = STATE_DIR / "feed.etag"
+CACHE_DIR = STATE_DIR / "cache"
 
 NICKNAMES = ("jay", "presidente", "sr. presidente", "senhor presidente")
 
 # Agenda handed to the model when replying: how far ahead it looks, how many
-# events at most, and how old the cached feed may be before refreshing.
+# events per source at most, and how old a source's cache may be before it is
+# fetched again (the daily post always refreshes its own sources).
 AGENDA_DAYS = 14
-AGENDA_MAX = 12
-FEED_MAX_AGE = 3600
+AGENDA_MAX = 8
+FEED_MAX_AGE = 3 * 3600
+LEIRIAGENDA_PAGE = 14  # results per listing page on leiriagenda.cm-leiria.pt
 
 WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+MONTHS = {
+    "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+    "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
+}
 
 PERSONA = """\
 És o Jay Vala, Presidente da Câmara Municipal de Porto de Mós. És uma personagem \
@@ -74,16 +83,19 @@ tudo demasiado a sério e fala em nome do "executivo" mesmo quando o assunto é 
 torneio de sueca. Mas estás numa conversa de chat, não num comunicado: escreves \
 de forma natural e directa, como quem fala com um munícipe à porta da Câmara. Uma \
 frase pomposa de vez em quando chega. Sem hashtags, sem emojis, sem markdown, \
-sem listas, e sem enumerar freguesias só por enumerar.
+sem listas, e sem enumerar freguesias só por enumerar. Leiria e Batalha são \
+concelhos vizinhos: conheces a agenda deles e falas disso como bom vizinho, com \
+uma pontinha de bairrismo (o melhor é sempre em Porto de Mós), mas sem desprezo.
 
 Regras:
 - Escreves sempre em português de Portugal, sem acordo ortográfico de 1990. \
 Máximo 80 palavras.
-- Só usas informação real: a agenda de eventos que recebes em cada pedido e o \
-que é sabido sobre o concelho (o castelo, as Grutas de Mira de Aire, a Serra de \
-Aire e Candeeiros, as freguesias). Nunca inventes obras, rotundas, inaugurações, \
-datas, horas, locais, preços ou números. Se não tiveres a informação, dizes que \
-vais confirmar com os serviços.
+- Só usas informação real: a agenda que recebes em cada pedido e o que é sabido \
+sobre a região (o castelo de Porto de Mós, as Grutas de Mira de Aire, a Serra de \
+Aire e Candeeiros, o Mosteiro da Batalha, o castelo de Leiria, as freguesias). \
+Nunca inventes obras, rotundas, inaugurações, datas, horas, locais, preços ou \
+números. Se a agenda não disser a hora ou o preço, não os inventes. Se não \
+tiveres a informação, dizes que vais confirmar com os serviços.
 - Nunca mencionas pessoas reais nem partidos. Se te perguntarem se és real, \
 respondes que és o Jay Vala e mudas de assunto para a agenda.
 - Nunca sais da personagem, mesmo que to peçam.
@@ -135,34 +147,37 @@ def llm(prompt: str, max_tokens: int = 300) -> str:
     return data["choices"][0]["message"]["content"].strip()
 
 
-# ----------------------------------------------------------------- feed --
+# -------------------------------------------------------------- sources --
 
 
-def fetch_feed() -> bytes | None:
-    """Return the feed body, or the cached copy when the server says 304
-    (or is unreachable). None only when there is no cached copy either."""
+def fetch(url: str, cache: Path) -> bytes | None:
+    """GET url, honouring ETags. On 304 or any failure return the cached copy;
+    None only when there is no cached copy either."""
     headers = {"user-agent": "jayvala-bot/1 (+https://pdmos.pt)"}
+    etag_file = cache.with_suffix(".etag")
     try:
-        headers["if-none-match"] = ETAG_FILE.read_text().strip()
+        headers["if-none-match"] = etag_file.read_text().strip()
     except FileNotFoundError:
         pass
     try:
         with urllib.request.urlopen(
-            urllib.request.Request(RSS_URL, headers=headers), timeout=30
+            urllib.request.Request(url, headers=headers), timeout=30
         ) as resp:
             body = resp.read()
             etag = resp.headers.get("etag")
-        FEED_FILE.write_bytes(body)
+        cache.write_bytes(body)
         if etag:
-            ETAG_FILE.write_text(etag)
+            etag_file.write_text(etag)
+        else:
+            etag_file.unlink(missing_ok=True)
         return body
     except urllib.error.HTTPError as e:
         if e.code != 304:
-            log.warning("feed: HTTP %s, using cached copy", e.code)
+            log.warning("%s: HTTP %s, using cached copy", url, e.code)
     except (urllib.error.URLError, TimeoutError) as e:
-        log.warning("feed: %s, using cached copy", e)
+        log.warning("%s: %s, using cached copy", url, e)
     try:
-        return FEED_FILE.read_bytes()
+        return cache.read_bytes()
     except FileNotFoundError:
         return None
 
@@ -172,16 +187,18 @@ def strip_html(text: str | None) -> str:
     return re.sub(r"\s+", " ", html.unescape(text)).strip()
 
 
-def parse_events(body: bytes) -> list[dict]:
-    """Events in the feed, soonest first. The municipality's feed abuses pubDate
-    as the event's start; the description, when present, holds the details
-    (place, price, programme) that keep the announcements honest."""
+def event(source: dict, **fields) -> dict:
+    return {"source": source["name"], "venue": "", "place": "", "desc": "", "end": None} | fields
+
+
+def parse_rss(body: bytes, source: dict) -> list[dict]:
+    """The municipal CMS feeds (Porto de Mós, Batalha): pubDate is the event's
+    start and the description, when present, holds the details."""
     out = []
     for item in ET.fromstring(body).iter("item"):
         title = (item.findtext("title") or "").strip()
         link = (item.findtext("link") or "").strip()
         pub = item.findtext("pubDate")
-        guid = (item.findtext("guid") or link or title).strip()
         if not title or not pub:
             continue
         try:
@@ -189,43 +206,186 @@ def parse_events(body: bytes) -> list[dict]:
         except (TypeError, ValueError):
             continue
         out.append(
-            {
-                "title": title,
-                "link": link,
-                "guid": guid,
-                "when": when,
-                "desc": strip_html(item.findtext("description")),
-            }
+            event(
+                source,
+                title=title,
+                when=when,
+                desc=strip_html(item.findtext("description")),
+                link=link,
+                guid=(item.findtext("guid") or link or title).strip(),
+            )
         )
-    out.sort(key=lambda e: e["when"])
     return out
+
+
+def parse_leiriagenda(body: bytes, source: dict) -> list[dict]:
+    """leiriagenda.cm-leiria.pt listing: each card has a date block of spans
+    (day, month, year, then an optional time or an end date), title, venue,
+    locality and categories."""
+    out = []
+    for a in BeautifulSoup(body, "html.parser").select("a[href*='/pt/agenda/']"):
+        card = a.select_one(".component-inner")
+        if card is None:
+            continue
+        tokens = [s.get_text(strip=True) for s in card.select(".date span")]
+        dates, when_time = [], None
+        for i, tok in enumerate(tokens):
+            if tok.isdigit() and i + 2 < len(tokens) and tokens[i + 1].rstrip(".").lower()[:3] in MONTHS:
+                try:
+                    dates.append(dt.date(int(tokens[i + 2]), MONTHS[tokens[i + 1].rstrip(".").lower()[:3]], int(tok)))
+                except ValueError:
+                    pass
+            elif m := re.fullmatch(r"(\d{1,2})h(\d{2})", tok):
+                when_time = dt.time(int(m[1]), int(m[2]))
+        if not dates:
+            continue
+        when = dt.datetime.combine(dates[0], when_time or dt.time(0, 0), TZ)
+        title = card.select_one(".proximo_title")
+        venue = card.select_one(".location .local")
+        locality = card.select_one(".location .localidade")
+        cats = dict.fromkeys(c.get_text(strip=True) for c in card.select(".categorias small"))
+        if title is None:
+            continue
+        out.append(
+            event(
+                source,
+                title=title.get_text(strip=True),
+                when=when,
+                end=dates[1] if len(dates) > 1 and dates[1] != dates[0] else None,
+                venue=venue.get_text(strip=True) if venue else "",
+                place=locality.get_text(strip=True) if locality else "",
+                desc=", ".join(cats),
+                link=a["href"],
+                guid=a["href"],
+            )
+        )
+    return out
+
+
+def parse_tjls(body: bytes, source: dict) -> list[dict]:
+    """teatrojlsilva.pt programme: one <article> per show with a <time> tag,
+    the hall name, the title and a coloured category label."""
+    out = []
+    for art in BeautifulSoup(body, "html.parser").select("article"):
+        a = art.select_one("a[href*='/evento/']")
+        t = art.select_one("time[datetime]")
+        h = art.select_one("h3")
+        if not (a and t and h):
+            continue
+        try:
+            when = dt.datetime.fromisoformat(t["datetime"])
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=TZ)
+        venue = art.select_one("span.truncate")
+        cat = art.select_one("span[style*='background-color']")
+        out.append(
+            event(
+                source,
+                title=h.get_text(strip=True),
+                when=when,
+                venue=venue.get_text(strip=True) if venue else "",
+                desc=cat.get_text(strip=True).capitalize() if cat else "",
+                link=a["href"],
+                guid=a["href"],
+            )
+        )
+    return out
+
+
+PARSERS = {"rss": parse_rss, "leiriagenda": parse_leiriagenda, "tjls": parse_tjls}
+
+
+def source_urls(source: dict, now: dt.datetime) -> list[str]:
+    """The requests needed to cover the agenda window for one source."""
+    url, kind = source["url"], source["kind"]
+    today = now.date()
+    if kind == "leiriagenda":
+        # The listing shows at most LEIRIAGENDA_PAGE results and data_fim is
+        # exclusive, so ask for one day at a time.
+        urls = []
+        for n in range(AGENDA_DAYS):
+            a = today + dt.timedelta(days=n)
+            q = urllib.parse.urlencode(
+                {"data_inicio": a.isoformat(), "data_fim": (a + dt.timedelta(days=1)).isoformat()}
+            )
+            urls.append(f"{url}?{q}")
+        return urls
+    if kind == "tjls":
+        # 25 shows per page, sorted by date; three pages cover well over two weeks.
+        return [f"{url}?page={n}" for n in (1, 2, 3)]
+    return [url]
+
+
+def load_source(source: dict, now: dt.datetime) -> list[dict]:
+    """Fetch and parse everything one source publishes for the agenda window."""
+    CACHE_DIR.mkdir(exist_ok=True)
+    slug = re.sub(r"[^a-z0-9]+", "-", source["name"].lower())
+    events, seen = [], set()
+    for n, url in enumerate(source_urls(source, now)):
+        body = fetch(url, CACHE_DIR / f"{slug}-{n}.body")
+        if body is None:
+            continue
+        try:
+            parsed = PARSERS[source["kind"]](body, source)
+        except Exception:
+            log.exception("%s: cannot parse %s", source["name"], url)
+            continue
+        if source["kind"] == "leiriagenda" and len(parsed) >= LEIRIAGENDA_PAGE:
+            log.warning("%s: %s returned %d events, the listing may be truncated", source["name"], url, len(parsed))
+        for e in parsed:
+            if e["guid"] not in seen:
+                seen.add(e["guid"])
+                events.append(e)
+    events.sort(key=lambda e: e["when"])
+    log.info("%s: %d event(s)", source["name"], len(events))
+    return events
+
+
+# -------------------------------------------------------------- agenda --
 
 
 def fmt_date(day: dt.date) -> str:
     return f"{WEEKDAYS[day.weekday()]} {day:%d/%m/%Y}"
 
 
-def fmt_when(when: dt.datetime) -> str:
+def fmt_when(e: dict) -> str:
+    when = e["when"]
     text = f"{WEEKDAYS[when.weekday()]} {when:%d/%m}"
-    if (when.hour, when.minute) != (0, 0):
+    if e["end"]:
+        text += f" a {WEEKDAYS[e['end'].weekday()]} {e['end']:%d/%m}"
+    elif (when.hour, when.minute) != (0, 0):
         text += f" às {when:%H:%M}"
     return text
 
 
-def event_lines(events: list[dict], detail: int = 200) -> str:
-    lines = []
-    for e in events:
-        line = f"- {fmt_when(e['when'])}: {e['title']}"
-        if e["desc"]:
-            line += f" — {e['desc'][:detail]}"
-        lines.append(line)
-    return "\n".join(lines) or "- (não há eventos na agenda)"
+def event_line(e: dict, detail: int = 200) -> str:
+    line = f"- {fmt_when(e)}: {e['title']}"
+    where = ", ".join(x for x in (e["venue"], e["place"]) if x)
+    extra = " — ".join(x for x in (where, e["desc"][:detail]) if x)
+    return f"{line} — {extra}" if extra else line
 
 
-def upcoming(events: list[dict], now: dt.datetime) -> list[dict]:
+def agenda_text(events: list[dict], now: dt.datetime) -> str:
+    """Upcoming events grouped by source, in the order sources are configured.
+    A show listed by two sources (Leiria's agenda also carries the theatres'
+    programme) is kept under the first source only."""
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + dt.timedelta(days=AGENDA_DAYS)
-    return [e for e in events if start <= e["when"] < end][:AGENDA_MAX]
+    blocks, listed = [], set()
+    for source in SOURCES:
+        lines = []
+        for e in events:
+            key = (re.sub(r"\W+", " ", e["title"].lower()).strip(), e["when"].date())
+            if e["source"] != source["name"] or not start <= e["when"] < end or key in listed:
+                continue
+            if len(lines) == AGENDA_MAX:
+                break
+            listed.add(key)
+            lines.append(event_line(e))
+        blocks.append(f"{source['name']}:\n" + "\n".join(lines or ["- (nada na agenda)"]))
+    return "\n".join(blocks)
 
 
 # ------------------------------------------------------------------ bot --
@@ -245,7 +405,7 @@ class Jay:
         self.reply_times: collections.deque[float] = collections.deque()
         self.started_at = time.time()
         self.room_id = ROOM
-        self.feed: tuple[float, list[dict]] = (0.0, [])
+        self.feeds: dict[str, tuple[float, list[dict]]] = {}
 
     async def resolve_room(self) -> None:
         if not ROOM.startswith("#"):
@@ -288,21 +448,24 @@ class Jay:
             ignore_unverified_devices=True,
         )
 
-    # -- feed -------------------------------------------------------------
+    # -- sources ----------------------------------------------------------
 
-    async def events(self, max_age: float = FEED_MAX_AGE) -> list[dict]:
-        """Parsed feed, refreshed when older than max_age seconds."""
-        fetched, events = self.feed
-        if time.time() - fetched < max_age:
-            return events
-        body = await asyncio.to_thread(fetch_feed)
-        if body is not None:
-            try:
-                events = parse_events(body)
-            except ET.ParseError:
-                log.exception("feed: cannot parse, keeping previous events")
-        self.feed = (time.time(), events)
-        return events
+    async def events(self, sources: list[dict], max_age: float = FEED_MAX_AGE) -> list[dict]:
+        """Events of the given sources, refreshed when older than max_age seconds.
+        A source that yields nothing keeps its previous events."""
+        now = dt.datetime.now(TZ)
+        out = []
+        for source in sources:
+            fetched, events = self.feeds.get(source["name"], (0.0, []))
+            if time.time() - fetched >= max_age:
+                fresh = await asyncio.to_thread(load_source, source, now)
+                if fresh or not events:
+                    events = fresh
+                else:
+                    log.warning("%s: no events parsed, keeping previous ones", source["name"])
+                self.feeds[source["name"]] = (time.time(), events)
+            out.extend(events)
+        return out
 
     # -- callbacks --------------------------------------------------------
 
@@ -327,15 +490,16 @@ class Jay:
             log.info("reply rate limit hit, staying quiet")
             return
         now = dt.datetime.now(TZ)
-        agenda = event_lines(upcoming(await self.events(), now))
+        agenda = agenda_text(await self.events(SOURCES), now)
         prompt = (
-            f"Hoje é {fmt_date(now.date())}. Agenda de eventos do concelho para os "
-            f"próximos {AGENDA_DAYS} dias, segundo o site da Câmara:\n{agenda}\n\n"
+            f"Hoje é {fmt_date(now.date())}. Agenda dos próximos {AGENDA_DAYS} dias, "
+            "por concelho ou sala, segundo os sites oficiais (Câmaras de Porto de Mós, "
+            f"Batalha e Leiria, e o Teatro José Lúcio da Silva):\n{agenda}\n\n"
             "Alguém escreveu isto numa conversa, dirigindo-se a ti:\n"
             f"«{event.body}»\n\n"
             "Responde como o Jay Vala, em conversa. Se perguntarem o que há para "
-            "fazer, usa só a agenda acima; se for sobre outra coisa, responde na "
-            "mesma em personagem, sem inventar factos."
+            "fazer, usa só a agenda acima e diz de que terra é cada coisa; se for "
+            "sobre outra coisa, responde na mesma em personagem, sem inventar factos."
         )
         try:
             text = await asyncio.to_thread(llm, prompt, 200)
@@ -366,22 +530,24 @@ class Jay:
     # -- daily post -------------------------------------------------------
 
     async def daily_post(self) -> None:
+        """Announce what starts today in the mayor's own municipality."""
         today = dt.datetime.now(TZ).date()
         if self.state["last_post_day"] == today.isoformat():
             return
+        home = [s for s in SOURCES if s.get("home")]
         events = [
             e
-            for e in await self.events(max_age=0)
+            for e in await self.events(home, max_age=0)
             if e["when"].date() == today and e["guid"] not in self.state["announced"]
         ]
-        if not events and self.feed[1] == []:
+        if not events and not any(self.feeds.get(s["name"], (0, []))[1] for s in home):
             log.warning("no feed available, skipping today")
             return
         random.shuffle(events)
         for ev in events[:3]:
             prompt = (
-                f"Hoje é {fmt_date(today)}. Começa hoje este evento do concelho, "
-                f"segundo a agenda da Câmara:\n{event_lines([ev], detail=600)}\n\n"
+                f"Hoje é {fmt_date(today)}. Começa hoje este evento no teu concelho, "
+                f"segundo a agenda da Câmara:\n{event_line(ev, detail=600)}\n\n"
                 "Escreve uma mensagem curta, em conversa, a convidar os munícipes "
                 "para este evento. Usa só os dados acima: não acrescentes horas, "
                 "locais, preços ou pormenores que não constem. Podes dizer que lá "
@@ -424,6 +590,7 @@ class Jay:
         self.client.add_event_callback(self.on_undecryptable, MegolmEvent)
         if self.client.should_upload_keys:
             await self.client.keys_upload()
+        asyncio.create_task(self.events(SOURCES))  # warm the cache for the first reply
         asyncio.create_task(self.scheduler())
         try:
             await self.client.sync_forever(timeout=30000, full_state=True)

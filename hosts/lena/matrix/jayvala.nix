@@ -3,7 +3,34 @@ let
   # nixos-26.05 pins matrix-nio 0.25 (libolm); 0.26 in unstable moved to vodozemac.
   python = pkgs.unstable.python3.withPackages (ps: [
     (ps.matrix-nio.override { withVodozemac = true; })
+    ps.beautifulsoup4
   ]);
+
+  # Where the bot reads events from. `home` marks the mayor's own municipality:
+  # only its events get the daily post; everything else is for replies.
+  sources = [
+    {
+      name = "Porto de Mós";
+      kind = "rss";
+      url = "https://www.municipio-portodemos.pt/pages/322.rss";
+      home = true;
+    }
+    {
+      name = "Batalha";
+      kind = "rss";
+      url = "https://www.cm-batalha.pt/pages/322.rss";
+    }
+    {
+      name = "Leiria";
+      kind = "leiriagenda";
+      url = "https://leiriagenda.cm-leiria.pt/pt/agenda";
+    }
+    {
+      name = "Teatros de Leiria";
+      kind = "tjls";
+      url = "https://teatrojlsilva.pt/programacao/eventos";
+    }
+  ];
 in
 {
   age.secrets.jayvala-matrix-password.file = ../../../secrets/jayvala-matrix-password.age;
@@ -23,7 +50,7 @@ in
       JAYVALA_USER = "@jay:pdmos.pt";
       # Room where the daily post goes. The bot must be invited there first.
       JAYVALA_ROOM = "#gabinete-do-presidente:pdmos.pt";
-      JAYVALA_RSS_URL = "https://www.municipio-portodemos.pt/pages/322.rss";
+      JAYVALA_SOURCES = builtins.toJSON sources;
       # Any OpenAI-compatible chat endpoint. For Amália on the tailnet, e.g.
       # "http://<host>.pdmos.ts:11434/v1/chat/completions" with the Ollama model
       # name, and drop the llm-api-key credential below.
