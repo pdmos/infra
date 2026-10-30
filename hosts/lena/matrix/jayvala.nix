@@ -56,7 +56,7 @@ in
       # name, and drop the llm-api-key credential below.
       JAYVALA_LLM_URL = "https://openrouter.ai/api/v1/chat/completions";
       JAYVALA_LLM_MODEL = "mistralai/mistral-small-3.2-24b-instruct";
-      JAYVALA_POST_HOUR = "9";
+      JAYVALA_POST_HOUR = "8";
       JAYVALA_REPLIES_PER_HOUR = "10";
       JAYVALA_TZ = "Europe/Lisbon";
     };

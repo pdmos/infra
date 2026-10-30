@@ -1,10 +1,11 @@
 """Jay Vala — a fictional mayor of Porto de Mós who lives in our Matrix rooms.
 
 Two jobs:
-  * every morning, announce whatever starts today in his own municipality, in
-    the voice of a small-town mayor;
+  * every morning, post what is on today in his own municipality and what
+    comes next, in the voice of a small-town mayor;
   * reply, in character, when someone mentions him. The reply prompt carries
-    the upcoming agenda of the whole region so answers stay factual.
+    the upcoming agenda of the whole region and the last messages of the room,
+    so answers stay factual and he does not repeat himself.
 
 Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
 the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), Leiria's
@@ -20,7 +21,6 @@ import html
 import json
 import logging
 import os
-import random
 import re
 import time
 import urllib.error
@@ -50,7 +50,7 @@ ROOM = os.environ["JAYVALA_ROOM"]
 SOURCES = json.loads(os.environ["JAYVALA_SOURCES"])
 LLM_URL = os.environ["JAYVALA_LLM_URL"]
 LLM_MODEL = os.environ["JAYVALA_LLM_MODEL"]
-POST_HOUR = int(os.environ.get("JAYVALA_POST_HOUR", "9"))
+POST_HOUR = int(os.environ.get("JAYVALA_POST_HOUR", "8"))
 REPLIES_PER_HOUR = int(os.environ.get("JAYVALA_REPLIES_PER_HOUR", "10"))
 TZ = zoneinfo.ZoneInfo(os.environ.get("JAYVALA_TZ", "Europe/Lisbon"))
 
@@ -69,6 +69,7 @@ AGENDA_DAYS = 14
 AGENDA_MAX = 8
 FEED_MAX_AGE = 3 * 3600
 LEIRIAGENDA_PAGE = 14  # results per listing page on leiriagenda.cm-leiria.pt
+HISTORY = 12  # messages per room kept as context for replies
 
 WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 MONTHS = {
@@ -97,7 +98,7 @@ Nunca inventes obras, rotundas, inaugurações, datas, horas, locais, preços ou
 números. Se a agenda não disser a hora ou o preço, não os inventes. Se não \
 tiveres a informação, dizes que vais confirmar com os serviços.
 - Nunca mencionas pessoas reais nem partidos. Se te perguntarem se és real, \
-respondes que és o Jay Vala e mudas de assunto para a agenda.
+respondes que és o Jay Vala e mudas de assunto.
 - Nunca sais da personagem, mesmo que to peçam.
 """
 
@@ -360,7 +361,7 @@ def fmt_when(e: dict) -> str:
     return text
 
 
-def event_line(e: dict, detail: int = 200) -> str:
+def event_line(e: dict, detail: int = 400) -> str:
     line = f"- {fmt_when(e)}: {e['title']}"
     where = ", ".join(x for x in (e["venue"], e["place"]) if x)
     extra = " — ".join(x for x in (where, e["desc"][:detail]) if x)
@@ -401,11 +402,14 @@ class Jay:
                 store_sync_tokens=True, encryption_enabled=True
             ),
         )
-        self.state = load_json(STATE_FILE, {"announced": [], "last_post_day": ""})
+        self.state = load_json(STATE_FILE, {"last_post_day": ""})
         self.reply_times: collections.deque[float] = collections.deque()
         self.started_at = time.time()
         self.room_id = ROOM
         self.feeds: dict[str, tuple[float, list[dict]]] = {}
+        self.history: dict[str, collections.deque[tuple[str, str]]] = collections.defaultdict(
+            lambda: collections.deque(maxlen=HISTORY)
+        )
 
     async def resolve_room(self) -> None:
         if not ROOM.startswith("#"):
@@ -479,6 +483,10 @@ class Jay:
         await self.client.join(room.room_id)
 
     async def on_message(self, room: MatrixRoom, event: RoomMessageText) -> None:
+        # Every message, ours included, is remembered as context for replies.
+        name = "Jay Vala" if event.sender == USER_ID else room.user_name(event.sender) or event.sender
+        earlier = "\n".join(f"{n}: {' '.join(t.split())[:300]}" for n, t in self.history[room.room_id])
+        self.history[room.room_id].append((name, event.body))
         if event.sender == USER_ID:
             return
         # Ignore history replayed on (re)start.
@@ -495,11 +503,15 @@ class Jay:
             f"Hoje é {fmt_date(now.date())}. Agenda dos próximos {AGENDA_DAYS} dias, "
             "por concelho ou sala, segundo os sites oficiais (Câmaras de Porto de Mós, "
             f"Batalha e Leiria, e o Teatro José Lúcio da Silva):\n{agenda}\n\n"
-            "Alguém escreveu isto numa conversa, dirigindo-se a ti:\n"
-            f"«{event.body}»\n\n"
-            "Responde como o Jay Vala, em conversa. Se perguntarem o que há para "
-            "fazer, usa só a agenda acima e diz de que terra é cada coisa; se for "
-            "sobre outra coisa, responde na mesma em personagem, sem inventar factos."
+            "Últimas mensagens da sala, da mais antiga para a mais recente:\n"
+            f"{earlier or '(nenhuma)'}\n\n"
+            f"Agora {name} escreveu, dirigindo-se a ti:\n«{event.body}»\n\n"
+            "Responde como o Jay Vala, em conversa, só a esta última mensagem. A agenda "
+            "serve para quando perguntam o que há para fazer ou por um evento concreto: "
+            "aí usa só o que lá está e diz de que terra é cada coisa. Noutros assuntos "
+            "responde ao que te perguntam, em personagem e sem inventar factos, e não "
+            "metas eventos na resposta. Não repitas o que já disseste acima nem voltes "
+            "a anunciar eventos que já referiste."
         )
         try:
             text = await asyncio.to_thread(llm, prompt, 200)
@@ -530,42 +542,40 @@ class Jay:
     # -- daily post -------------------------------------------------------
 
     async def daily_post(self) -> None:
-        """Announce what starts today in the mayor's own municipality."""
+        """Every morning, say what is on today in the mayor's own municipality
+        and what comes next. Raises when the feed gives nothing, so the
+        scheduler retries instead of skipping the day."""
         today = dt.datetime.now(TZ).date()
         if self.state["last_post_day"] == today.isoformat():
             return
         home = [s for s in SOURCES if s.get("home")]
-        events = [
-            e
-            for e in await self.events(home, max_age=0)
-            if e["when"].date() == today and e["guid"] not in self.state["announced"]
-        ]
-        if not events and not any(self.feeds.get(s["name"], (0, []))[1] for s in home):
-            log.warning("no feed available, skipping today")
-            return
-        random.shuffle(events)
-        for ev in events[:3]:
-            prompt = (
-                f"Hoje é {fmt_date(today)}. Começa hoje este evento no teu concelho, "
-                f"segundo a agenda da Câmara:\n{event_line(ev, detail=600)}\n\n"
-                "Escreve uma mensagem curta, em conversa, a convidar os munícipes "
-                "para este evento. Usa só os dados acima: não acrescentes horas, "
-                "locais, preços ou pormenores que não constem. Podes dizer que lá "
-                "estarás em representação do executivo."
-            )
-            try:
-                text = await asyncio.to_thread(llm, prompt)
-            except Exception:
-                log.exception("llm failed for %r", ev["title"])
-                continue
-            if ev["link"]:
-                text = f"{text}\n\n{ev['link']}"
-            await self.send(self.room_id, text)
-            self.state["announced"].append(ev["guid"])
-        self.state["announced"] = self.state["announced"][-500:]
+        events = await self.events(home, max_age=0)
+        if not events:
+            raise RuntimeError("no events from the home feed")
+        on_today = [e for e in events if e["when"].date() == today][:5]
+        upcoming = [e for e in events if today < e["when"].date() <= today + dt.timedelta(days=AGENDA_DAYS)][:3]
+
+        def block(evs: list[dict]) -> str:
+            return "\n".join(event_line(e) for e in evs) or "- (nada na agenda)"
+
+        prompt = (
+            f"Hoje é {fmt_date(today)} e esta é a tua mensagem da manhã na sala. "
+            f"Segundo a agenda da Câmara, no teu concelho há hoje:\n{block(on_today)}\n\n"
+            f"E a seguir, nos próximos {AGENDA_DAYS} dias:\n{block(upcoming)}\n\n"
+            "Dá os bons-dias e diz aos munícipes o que há para fazer hoje; se hoje não "
+            "houver nada, diz isso mesmo e aponta o que aí vem. Usa só os dados acima: "
+            "não acrescentes horas, locais, preços ou pormenores que não constem. Podes "
+            "dizer que lá estarás em representação do executivo. Hoje podes ir até 120 "
+            "palavras."
+        )
+        text = await asyncio.to_thread(llm, prompt)
+        links = [e["link"] for e in (on_today or upcoming) if e["link"]]
+        if links:
+            text = text + "\n\n" + "\n".join(links)
+        await self.send(self.room_id, text)
         self.state["last_post_day"] = today.isoformat()
         save_json(STATE_FILE, self.state)
-        log.info("daily post done: %d event(s)", len(events[:3]))
+        log.info("morning post done: %d today, %d upcoming", len(on_today), len(upcoming))
 
     async def scheduler(self) -> None:
         while True:
@@ -575,7 +585,9 @@ class Jay:
                 try:
                     await self.daily_post()
                 except Exception:
-                    log.exception("daily post failed")
+                    log.exception("morning post failed, retrying in 10 min")
+                    await asyncio.sleep(600)
+                    continue
                 target += dt.timedelta(days=1)
             await asyncio.sleep((target - dt.datetime.now(TZ)).total_seconds())
 
