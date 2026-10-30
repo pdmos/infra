@@ -40,6 +40,18 @@
   .vazio { color: var(--pedra-2); font-size: 0.95rem; }
   .todos { display: inline-block; margin-top: 1rem; font-size: 0.9rem; }
 
+  .docs { max-width: 40rem; padding: 3rem var(--margem) 5rem; line-height: 1.55; }
+  .docs h2 { margin: 3rem 0 0.75rem; font-size: 0.8rem; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase; color: var(--verde); }
+  .docs h2:first-child { margin-top: 0; }
+  .docs p, .docs li { margin: 0 0 0.9rem; font-size: 1.05rem; }
+  .docs ol, .docs ul { padding-left: 1.4rem; }
+  .docs li { margin-bottom: 0.4rem; }
+  .docs code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; color: var(--verde); }
+  .docs table { border-collapse: collapse; margin: 0 0 1rem; font-size: 0.95rem; }
+  .docs th, .docs td { text-align: left; padding: 0.45rem 1.25rem 0.45rem 0; border-top: 1px solid rgba(237,231,218,0.1); vertical-align: top; }
+  .docs th { font-weight: 400; color: var(--pedra-2); }
+  .docs thead th { border-top: 0; }
+
   /* Wide screens: the events become a scrollable panel on the left, where the photo is only sky and fields */
   @media (min-width: 960px) {
     .capa { flex-direction: row; align-items: stretch; height: 100vh; height: 100dvh; }
@@ -79,5 +91,7 @@
   </aside>
 </main>
 
-<!-- Reserved for later: a short how-to-join and the list of services. -->
+<section class="docs">
+{{ .Content }}
+</section>
 </html>
