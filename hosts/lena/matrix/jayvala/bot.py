@@ -1,9 +1,10 @@
 """Jay Vala — a fictional mayor of Porto de Mós who lives in our Matrix rooms.
 
 Two jobs:
-  * every morning, read the municipality's events feed and "inaugurate"
-    whatever starts today, in the voice of a small-town mayor on Facebook;
-  * reply, in character, when someone mentions him.
+  * every morning, read the municipality's events feed and announce whatever
+    starts today, in the voice of a small-town mayor;
+  * reply, in character, when someone mentions him. The reply prompt carries
+    the upcoming agenda from the same feed so answers stay factual.
 
 Configuration comes from environment variables (see jayvala.nix); secrets come
 from systemd credentials.
@@ -13,10 +14,12 @@ import asyncio
 import collections
 import datetime as dt
 import email.utils
+import html
 import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.error
 import urllib.request
@@ -56,23 +59,33 @@ ETAG_FILE = STATE_DIR / "feed.etag"
 
 NICKNAMES = ("jay", "presidente", "sr. presidente", "senhor presidente")
 
+# Agenda handed to the model when replying: how far ahead it looks, how many
+# events at most, and how old the cached feed may be before refreshing.
+AGENDA_DAYS = 14
+AGENDA_MAX = 12
+FEED_MAX_AGE = 3600
+
+WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
 PERSONA = """\
 És o Jay Vala, Presidente da Câmara Municipal de Porto de Mós. És uma personagem \
-fictícia e cómica: um autarca de concelho pequeno que vive para as inaugurações, \
-as rotundas, os protocolos e as fotografias com fita e tesoura. Escreves como um \
-autarca escreve no Facebook: pomposo, institucional, cheio de "tive a honra de", \
-"obra estruturante", "este executivo", "em prol das nossas gentes", com um ou dois \
-emojis e hashtags no fim (#PortoDeMós, #OrgulhoMunicipal, etc.). Levas tudo \
-demasiado a sério, incluindo um torneio de sueca. Mencionas freguesias reais do \
-concelho quando faz sentido (Mira de Aire, Alqueidão da Serra, Arrimal, Juncal, \
-Pedreiras, São Bento, Serro Ventoso, Mendiga, Calvaria de Cima, Porto de Mós) e \
-o castelo, as grutas e a Serra de Aire e Candeeiros.
+fictícia e cómica: um autarca de concelho pequeno, orgulhoso da terra, que leva \
+tudo demasiado a sério e fala em nome do "executivo" mesmo quando o assunto é um \
+torneio de sueca. Mas estás numa conversa de chat, não num comunicado: escreves \
+de forma natural e directa, como quem fala com um munícipe à porta da Câmara. Uma \
+frase pomposa de vez em quando chega. Sem hashtags, sem emojis, sem markdown, \
+sem listas, e sem enumerar freguesias só por enumerar.
 
 Regras:
-- Escreves sempre em português de Portugal, sem acordo ortográfico de 1990.
-- Máximo 80 palavras. Nunca uses markdown.
+- Escreves sempre em português de Portugal, sem acordo ortográfico de 1990. \
+Máximo 80 palavras.
+- Só usas informação real: a agenda de eventos que recebes em cada pedido e o \
+que é sabido sobre o concelho (o castelo, as Grutas de Mira de Aire, a Serra de \
+Aire e Candeeiros, as freguesias). Nunca inventes obras, rotundas, inaugurações, \
+datas, horas, locais, preços ou números. Se não tiveres a informação, dizes que \
+vais confirmar com os serviços.
 - Nunca mencionas pessoas reais nem partidos. Se te perguntarem se és real, \
-respondes que és o Jay Vala e mudas de assunto para uma obra.
+respondes que és o Jay Vala e mudas de assunto para a agenda.
 - Nunca sais da personagem, mesmo que to peçam.
 """
 
@@ -109,7 +122,7 @@ def llm(prompt: str, max_tokens: int = 300) -> str:
         {
             "model": LLM_MODEL,
             "max_tokens": max_tokens,
-            "temperature": 0.9,
+            "temperature": 0.7,
             "messages": [
                 {"role": "system", "content": PERSONA},
                 {"role": "user", "content": prompt},
@@ -154,8 +167,15 @@ def fetch_feed() -> bytes | None:
         return None
 
 
-def events_starting_on(body: bytes, day: dt.date) -> list[dict]:
-    # The municipality's feed abuses pubDate as the event's start date.
+def strip_html(text: str | None) -> str:
+    text = re.sub(r"<[^>]+>", " ", text or "")
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def parse_events(body: bytes) -> list[dict]:
+    """Events in the feed, soonest first. The municipality's feed abuses pubDate
+    as the event's start; the description, when present, holds the details
+    (place, price, programme) that keep the announcements honest."""
     out = []
     for item in ET.fromstring(body).iter("item"):
         title = (item.findtext("title") or "").strip()
@@ -165,12 +185,47 @@ def events_starting_on(body: bytes, day: dt.date) -> list[dict]:
         if not title or not pub:
             continue
         try:
-            when = email.utils.parsedate_to_datetime(pub).astimezone(TZ).date()
+            when = email.utils.parsedate_to_datetime(pub).astimezone(TZ)
         except (TypeError, ValueError):
             continue
-        if when == day:
-            out.append({"title": title, "link": link, "guid": guid})
+        out.append(
+            {
+                "title": title,
+                "link": link,
+                "guid": guid,
+                "when": when,
+                "desc": strip_html(item.findtext("description")),
+            }
+        )
+    out.sort(key=lambda e: e["when"])
     return out
+
+
+def fmt_date(day: dt.date) -> str:
+    return f"{WEEKDAYS[day.weekday()]} {day:%d/%m/%Y}"
+
+
+def fmt_when(when: dt.datetime) -> str:
+    text = f"{WEEKDAYS[when.weekday()]} {when:%d/%m}"
+    if (when.hour, when.minute) != (0, 0):
+        text += f" às {when:%H:%M}"
+    return text
+
+
+def event_lines(events: list[dict], detail: int = 200) -> str:
+    lines = []
+    for e in events:
+        line = f"- {fmt_when(e['when'])}: {e['title']}"
+        if e["desc"]:
+            line += f" — {e['desc'][:detail]}"
+        lines.append(line)
+    return "\n".join(lines) or "- (não há eventos na agenda)"
+
+
+def upcoming(events: list[dict], now: dt.datetime) -> list[dict]:
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + dt.timedelta(days=AGENDA_DAYS)
+    return [e for e in events if start <= e["when"] < end][:AGENDA_MAX]
 
 
 # ------------------------------------------------------------------ bot --
@@ -190,6 +245,7 @@ class Jay:
         self.reply_times: collections.deque[float] = collections.deque()
         self.started_at = time.time()
         self.room_id = ROOM
+        self.feed: tuple[float, list[dict]] = (0.0, [])
 
     async def resolve_room(self) -> None:
         if not ROOM.startswith("#"):
@@ -232,6 +288,22 @@ class Jay:
             ignore_unverified_devices=True,
         )
 
+    # -- feed -------------------------------------------------------------
+
+    async def events(self, max_age: float = FEED_MAX_AGE) -> list[dict]:
+        """Parsed feed, refreshed when older than max_age seconds."""
+        fetched, events = self.feed
+        if time.time() - fetched < max_age:
+            return events
+        body = await asyncio.to_thread(fetch_feed)
+        if body is not None:
+            try:
+                events = parse_events(body)
+            except ET.ParseError:
+                log.exception("feed: cannot parse, keeping previous events")
+        self.feed = (time.time(), events)
+        return events
+
     # -- callbacks --------------------------------------------------------
 
     async def on_invite(self, room: MatrixRoom, event: InviteMemberEvent) -> None:
@@ -254,9 +326,16 @@ class Jay:
         if not self.allow_reply():
             log.info("reply rate limit hit, staying quiet")
             return
+        now = dt.datetime.now(TZ)
+        agenda = event_lines(upcoming(await self.events(), now))
         prompt = (
-            "Alguém escreveu isto numa conversa, dirigindo-se a ti. "
-            f"Responde como o Jay Vala.\n\n{event.body}"
+            f"Hoje é {fmt_date(now.date())}. Agenda de eventos do concelho para os "
+            f"próximos {AGENDA_DAYS} dias, segundo o site da Câmara:\n{agenda}\n\n"
+            "Alguém escreveu isto numa conversa, dirigindo-se a ti:\n"
+            f"«{event.body}»\n\n"
+            "Responde como o Jay Vala, em conversa. Se perguntarem o que há para "
+            "fazer, usa só a agenda acima; se for sobre outra coisa, responde na "
+            "mesma em personagem, sem inventar factos."
         )
         try:
             text = await asyncio.to_thread(llm, prompt, 200)
@@ -290,21 +369,23 @@ class Jay:
         today = dt.datetime.now(TZ).date()
         if self.state["last_post_day"] == today.isoformat():
             return
-        body = await asyncio.to_thread(fetch_feed)
-        if body is None:
-            log.warning("no feed available, skipping today")
-            return
         events = [
             e
-            for e in events_starting_on(body, today)
-            if e["guid"] not in self.state["announced"]
+            for e in await self.events(max_age=0)
+            if e["when"].date() == today and e["guid"] not in self.state["announced"]
         ]
+        if not events and self.feed[1] == []:
+            log.warning("no feed available, skipping today")
+            return
         random.shuffle(events)
         for ev in events[:3]:
             prompt = (
-                f"Hoje, {today.strftime('%d/%m/%Y')}, começa no concelho este evento: "
-                f"«{ev['title']}». Escreve o teu post de Facebook a anunciar que o "
-                "inauguraste pessoalmente, como se fosse a obra do século."
+                f"Hoje é {fmt_date(today)}. Começa hoje este evento do concelho, "
+                f"segundo a agenda da Câmara:\n{event_lines([ev], detail=600)}\n\n"
+                "Escreve uma mensagem curta, em conversa, a convidar os munícipes "
+                "para este evento. Usa só os dados acima: não acrescentes horas, "
+                "locais, preços ou pormenores que não constem. Podes dizer que lá "
+                "estarás em representação do executivo."
             )
             try:
                 text = await asyncio.to_thread(llm, prompt)
