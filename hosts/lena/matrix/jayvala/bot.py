@@ -3,9 +3,11 @@
 Two jobs:
   * every morning, post what is on today in his own municipality and what
     comes next, in the voice of a small-town mayor;
-  * reply, in character, when someone mentions him. The reply prompt carries
-    the upcoming agenda of the whole region and the last messages of the room,
-    so answers stay factual and he does not repeat himself.
+  * reply, in character, when someone mentions him, replies to one of his
+    messages, or keeps asking him things right after he answered them. The
+    reply prompt carries the upcoming agenda of the whole region and the last
+    messages of the room, so answers stay factual and he does not repeat
+    himself.
 
 Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
 the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), Leiria's
@@ -65,6 +67,13 @@ CACHE_DIR = STATE_DIR / "cache"
 
 NICKNAMES = ("jay", "presidente", "sr. presidente", "senhor presidente")
 
+# Within FOLLOW_UP seconds of a reply, a message that looks like a question
+# from the same person is taken as addressed to Jay even without his name.
+QUESTION = re.compile(
+    r"\?|\b(o que|onde|quando|qual|quais|quem|como|porqu\w*|quero saber|diz-me|diga-me|conta-me)\b",
+    re.IGNORECASE,
+)
+
 # A message about food gets the restaurant list in its prompt.
 FOOD_WORDS = re.compile(
     r"\b(com(er|ida|e|es|em|emos)\b|restaurant|almo[çc]|jant|tasca|tabern|petisc|caf[eé]\b"
@@ -81,6 +90,7 @@ AGENDA_MAX = 8
 FEED_MAX_AGE = 3 * 3600
 LEIRIAGENDA_PAGE = 14  # results per listing page on leiriagenda.cm-leiria.pt
 HISTORY = 12  # messages per room kept as context for replies
+FOLLOW_UP = 180  # seconds during which whoever Jay just answered keeps his attention
 
 WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 MONTHS = {
@@ -416,6 +426,14 @@ def restaurants_text() -> str:
     return "\n".join(f"{town}:\n" + "\n".join(lines) for town, lines in blocks.items())
 
 
+def message_text(event: RoomMessageText) -> str:
+    """The message body without the quoted fallback some clients prepend to replies."""
+    body = event.body
+    if "m.in_reply_to" in event.source.get("content", {}).get("m.relates_to", {}):
+        body = re.sub(r"\A(?:>.*\n)+\n?", "", body)
+    return body
+
+
 # ------------------------------------------------------------------ bot --
 
 
@@ -437,6 +455,8 @@ class Jay:
         self.history: dict[str, collections.deque[tuple[str, str]]] = collections.defaultdict(
             lambda: collections.deque(maxlen=HISTORY)
         )
+        self.own_events: collections.deque[str] = collections.deque(maxlen=200)
+        self.last_reply: dict[str, float] = {}  # sender -> when Jay last answered them
 
     async def resolve_room(self) -> None:
         if not ROOM.startswith("#"):
@@ -512,14 +532,16 @@ class Jay:
     async def on_message(self, room: MatrixRoom, event: RoomMessageText) -> None:
         # Every message, ours included, is remembered as context for replies.
         name = "Jay Vala" if event.sender == USER_ID else room.user_name(event.sender) or event.sender
+        body = message_text(event)
         earlier = "\n".join(f"{n}: {' '.join(t.split())[:300]}" for n, t in self.history[room.room_id])
-        self.history[room.room_id].append((name, event.body))
+        self.history[room.room_id].append((name, body))
         if event.sender == USER_ID:
+            self.own_events.append(event.event_id)
             return
         # Ignore history replayed on (re)start.
         if event.server_timestamp / 1000 < self.started_at - 60:
             return
-        if not self.mentioned(event):
+        if not self.mentioned(event, body):
             return
         if not self.allow_reply():
             log.info("reply rate limit hit, staying quiet")
@@ -527,7 +549,7 @@ class Jay:
         now = dt.datetime.now(TZ)
         agenda = agenda_text(await self.events(SOURCES), now)
         food = ""
-        if FOOD_WORDS.search(event.body):
+        if FOOD_WORDS.search(body):
             food = (
                 f"Sítios para comer, segundo o {RESTAURANTS['fonte']}, por número "
                 f"de avaliações:\n{restaurants_text()}\n\n"
@@ -542,8 +564,10 @@ class Jay:
             f"{food}"
             "Últimas mensagens da sala, da mais antiga para a mais recente:\n"
             f"{earlier or '(nenhuma)'}\n\n"
-            f"Agora {name} escreveu, dirigindo-se a ti:\n«{event.body}»\n\n"
-            "Responde como o Jay Vala, em conversa, só a esta última mensagem. A agenda "
+            f"Agora {name} escreveu, dirigindo-se a ti:\n«{body}»\n\n"
+            "Responde como o Jay Vala, em conversa, só a esta última mensagem. Trata as "
+            "pessoas pelo primeiro nome e só de vez em quando; não comeces a resposta "
+            "pelo nome de quem escreveu. A agenda "
             "serve para quando perguntam o que há para fazer ou por um evento concreto: "
             "aí usa só o que lá está e diz de que terra é cada coisa. Noutros assuntos "
             "responde ao que te perguntam, em personagem e sem inventar factos, e não "
@@ -556,16 +580,22 @@ class Jay:
             log.exception("llm failed")
             return
         await self.send(room.room_id, text)
+        self.last_reply[event.sender] = time.time()
 
     async def on_undecryptable(self, room: MatrixRoom, event: MegolmEvent) -> None:
         log.warning("could not decrypt event %s in %s", event.event_id, room.room_id)
 
-    def mentioned(self, event: RoomMessageText) -> bool:
-        mentions = event.source.get("content", {}).get("m.mentions", {})
-        if USER_ID in mentions.get("user_ids", []):
+    def mentioned(self, event: RoomMessageText, body: str) -> bool:
+        content = event.source.get("content", {})
+        if USER_ID in content.get("m.mentions", {}).get("user_ids", []):
             return True
-        body = event.body.lower()
-        return any(n in body for n in NICKNAMES)
+        if content.get("m.relates_to", {}).get("m.in_reply_to", {}).get("event_id") in self.own_events:
+            return True
+        lower = body.lower()
+        if any(n in lower for n in NICKNAMES):
+            return True
+        recent = time.time() - self.last_reply.get(event.sender, 0) < FOLLOW_UP
+        return recent and QUESTION.search(lower) is not None
 
     def allow_reply(self) -> bool:
         now = time.time()
