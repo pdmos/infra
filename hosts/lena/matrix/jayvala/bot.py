@@ -10,7 +10,9 @@ Two jobs:
 Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
 the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), Leiria's
 agenda site and the programme of Leiria's municipal theatres (both HTML).
-Secrets come from systemd credentials.
+A curated list of places to eat (JAYVALA_RESTAURANTS, see restaurantes.json)
+is added to the prompt only when the message is about food. Secrets come from
+systemd credentials.
 """
 
 import asyncio
@@ -48,6 +50,7 @@ HOMESERVER = os.environ["JAYVALA_HOMESERVER"]
 USER_ID = os.environ["JAYVALA_USER"]
 ROOM = os.environ["JAYVALA_ROOM"]
 SOURCES = json.loads(os.environ["JAYVALA_SOURCES"])
+RESTAURANTS = json.loads(Path(os.environ["JAYVALA_RESTAURANTS"]).read_text())
 LLM_URL = os.environ["JAYVALA_LLM_URL"]
 LLM_MODEL = os.environ["JAYVALA_LLM_MODEL"]
 POST_HOUR = int(os.environ.get("JAYVALA_POST_HOUR", "8"))
@@ -61,6 +64,14 @@ STATE_FILE = STATE_DIR / "state.json"
 CACHE_DIR = STATE_DIR / "cache"
 
 NICKNAMES = ("jay", "presidente", "sr. presidente", "senhor presidente")
+
+# A message about food gets the restaurant list in its prompt.
+FOOD_WORDS = re.compile(
+    r"\b(com(er|ida|e|es|em|emos)\b|restaurant|almo[çc]|jant|tasca|tabern|petisc|caf[eé]\b"
+    r"|pastelar|pizz|churrasc|frango|leit[ãa]o|bitoque|fome\b|lanch|marisc|peix|bacalhau"
+    r"|cozido|sobremesa|beber|cervej|gelad|esplanad|hamb[uú]rg|snack|bar\b)",
+    re.IGNORECASE,
+)
 
 # Agenda handed to the model when replying: how far ahead it looks, how many
 # events per source at most, and how old a source's cache may be before it is
@@ -389,6 +400,22 @@ def agenda_text(events: list[dict], now: dt.datetime) -> str:
     return "\n".join(blocks)
 
 
+def restaurants_text() -> str:
+    """Places to eat grouped by municipality, the mayor's own first, busiest
+    (most reviewed) first within each."""
+    order = {s["name"]: i for i, s in enumerate(SOURCES)}
+    places = sorted(RESTAURANTS["restaurantes"], key=lambda r: (order.get(r["concelho"], 99), -r["avaliacoes"]))
+    blocks: dict[str, list[str]] = {}
+    for r in places:
+        bits = [r["localidade"] or r["concelho"], r["categoria"]]
+        if r["nota"]:
+            bits.append(f"{r['nota']} em {r['avaliacoes']} avaliações")
+        if r["preco"]:
+            bits.append("€" * r["preco"])
+        blocks.setdefault(r["concelho"], []).append(f"- {r['nome']} ({'; '.join(bits)})")
+    return "\n".join(f"{town}:\n" + "\n".join(lines) for town, lines in blocks.items())
+
+
 # ------------------------------------------------------------------ bot --
 
 
@@ -499,10 +526,20 @@ class Jay:
             return
         now = dt.datetime.now(TZ)
         agenda = agenda_text(await self.events(SOURCES), now)
+        food = ""
+        if FOOD_WORDS.search(event.body):
+            food = (
+                f"Sítios para comer, segundo o {RESTAURANTS['fonte']}, por número "
+                f"de avaliações:\n{restaurants_text()}\n\n"
+                "Se perguntarem onde comer, usa só esta lista: podes dizer a localidade, "
+                "o tipo e a nota, mais nada. Puxa pelo teu concelho, sem esconder a "
+                "Batalha.\n\n"
+            )
         prompt = (
             f"Hoje é {fmt_date(now.date())}. Agenda dos próximos {AGENDA_DAYS} dias, "
             "por concelho ou sala, segundo os sites oficiais (Câmaras de Porto de Mós, "
             f"Batalha e Leiria, e o Teatro José Lúcio da Silva):\n{agenda}\n\n"
+            f"{food}"
             "Últimas mensagens da sala, da mais antiga para a mais recente:\n"
             f"{earlier or '(nenhuma)'}\n\n"
             f"Agora {name} escreveu, dirigindo-se a ti:\n«{event.body}»\n\n"

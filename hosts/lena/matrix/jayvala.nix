@@ -51,6 +51,7 @@ in
       # Room where the daily post goes. The bot must be invited there first.
       JAYVALA_ROOM = "#gabinete-do-presidente:pdmos.pt";
       JAYVALA_SOURCES = builtins.toJSON sources;
+      JAYVALA_RESTAURANTS = "${./jayvala/restaurantes.json}";
       # Any OpenAI-compatible chat endpoint. For Amália on the tailnet, e.g.
       # "http://<host>.pdmos.ts:11434/v1/chat/completions" with the Ollama model
       # name, and drop the llm-api-key credential below.
