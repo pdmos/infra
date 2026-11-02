@@ -4,16 +4,25 @@ let
   python = pkgs.unstable.python3.withPackages (ps: [
     (ps.matrix-nio.override { withVodozemac = true; })
     ps.beautifulsoup4
+    ps.pypdf
   ]);
 
-  # Where the bot reads events from. `home` marks the mayor's own municipality:
-  # only its events get the daily post; everything else is for replies.
+  # Where the bot reads events from. `home` marks the mayor's own municipality,
+  # whose coming events get the "what's next" of the morning post. `lead` makes
+  # the morning post announce a source's events once, that many days ahead, for
+  # what people need to book or plan (tickets, the assembly sessions).
   sources = [
     {
       name = "Porto de Mós";
       kind = "rss";
       url = "https://www.municipio-portodemos.pt/pages/322.rss";
       home = true;
+    }
+    {
+      name = "Assembleia Municipal";
+      kind = "sessoesam";
+      url = "https://www.municipio-portodemos.pt/p/sessoesam";
+      lead = 5;
     }
     {
       name = "Batalha";
@@ -29,6 +38,7 @@ let
       name = "Teatros de Leiria";
       kind = "tjls";
       url = "https://teatrojlsilva.pt/programacao/eventos";
+      lead = 5;
     }
   ];
 in

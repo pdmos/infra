@@ -1,8 +1,9 @@
 """Jay Vala — a fictional mayor of Porto de Mós who lives in our Matrix rooms.
 
 Two jobs:
-  * every morning, post what is on today in his own municipality and what
-    comes next, in the voice of a small-town mayor;
+  * every morning, post what is on today across the region, what comes next
+    in his own municipality and a one-time heads-up for what people book
+    ahead (sources with a `lead`), in the voice of a small-town mayor;
   * reply, in character, when someone mentions him, replies to one of his
     messages, or keeps asking him things right after he answered them. The
     reply prompt carries the upcoming agenda of the whole region and the last
@@ -10,8 +11,10 @@ Two jobs:
     himself.
 
 Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
-the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), Leiria's
-agenda site and the programme of Leiria's municipal theatres (both HTML).
+the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), the sessions
+of Porto de Mós' municipal assembly (HTML listing plus the convocatória PDF),
+Leiria's agenda site and the programme of Leiria's municipal theatres (both
+HTML).
 A curated list of places to eat (JAYVALA_RESTAURANTS, see restaurantes.json)
 is added to the prompt only when the message is about food. Secrets come from
 systemd credentials.
@@ -22,6 +25,7 @@ import collections
 import datetime as dt
 import email.utils
 import html
+import io
 import json
 import logging
 import os
@@ -45,6 +49,7 @@ from nio import (
     RoomMessageText,
     RoomResolveAliasResponse,
 )
+from pypdf import PdfReader
 
 log = logging.getLogger("jayvala")
 
@@ -91,6 +96,12 @@ FEED_MAX_AGE = 3 * 3600
 LEIRIAGENDA_PAGE = 14  # results per listing page on leiriagenda.cm-leiria.pt
 HISTORY = 12  # messages per room kept as context for replies
 FOLLOW_UP = 180  # seconds during which whoever Jay just answered keeps his attention
+
+# Morning post: events per source for today (the mayor's own municipality
+# gets more room) and how many heads-up events at most.
+MORNING_HOME = 5
+MORNING_OTHER = 3
+MORNING_AHEAD = 4
 
 WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 MONTHS = {
@@ -316,7 +327,69 @@ def parse_tjls(body: bytes, source: dict) -> list[dict]:
     return out
 
 
-PARSERS = {"rss": parse_rss, "leiriagenda": parse_leiriagenda, "tjls": parse_tjls}
+def pdf_text(body: bytes) -> str:
+    return re.sub(r"\s+", " ", " ".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(body)).pages))
+
+
+def parse_sessoesam(body: bytes, source: dict) -> list[dict]:
+    """municipio-portodemos.pt/p/sessoesam: a folder per year listing the
+    convocatória (and later the minutes) of each municipal assembly session,
+    dated with the session day. Unlike the other parsers this one fetches
+    more: this year's folder and, for sessions still to come, the
+    convocatória PDF, which gives the time, the venue and the agenda."""
+    today = dt.datetime.now(TZ).date()
+    slug = re.sub(r"[^a-z0-9]+", "-", source["name"].lower())
+    out = []
+    for a in BeautifulSoup(body, "html.parser").select("a.folder"):
+        year = a.get_text(strip=True)
+        if not (year.isdigit() and int(year) >= today.year):
+            continue
+        page = fetch(urllib.parse.urljoin(source["url"], a["href"]), CACHE_DIR / f"{slug}-{year}.body")
+        for li in BeautifulSoup(page or b"", "html.parser").select("ul.documents li"):
+            title = li.select_one("span")
+            date = li.select_one(".description")
+            link = li.select_one("a[href]")
+            number = re.search(r"\d+", title.get_text() if title else "")
+            if not (title and date and link and number) or "convocat" not in title.get_text().lower():
+                continue
+            try:
+                day = dt.datetime.strptime(date.get_text(strip=True), "%d-%m-%Y").date()
+            except ValueError:
+                continue
+            url = urllib.parse.urljoin(source["url"], link["href"])
+            kind, when, venue, desc = "Sessão", dt.datetime.combine(day, dt.time(0, 0), TZ), "", ""
+            if day >= today and (pdf := fetch(url, CACHE_DIR / f"{slug}-{year}-{number[0]}.pdf")):
+                try:
+                    text = pdf_text(pdf)
+                except Exception:
+                    log.exception("%s: cannot read %s", source["name"], url)
+                    text = ""
+                if m := re.search(r"Sess[ãa]o (Ordin[áa]ria|Extraordin[áa]ria)", text, re.I):
+                    kind = f"Sessão {m[1].lower()}"
+                # pypdf may split digits ("1 9:00"), hence the optional spaces.
+                if m := re.search(r"in[íi]cio pelas (\d[\d ]?\d?)(?:[:h.,] ?(\d ?\d))? ?horas", text, re.I):
+                    hour, minute = int(m[1].replace(" ", "")), int((m[2] or "0").replace(" ", ""))
+                    if hour < 24 and minute < 60:
+                        when = when.replace(hour=hour, minute=minute)
+                if m := re.search(r"ter[áa] lugar (?:n[oa]s? |em )?(.+?),? com in[íi]cio", text, re.I):
+                    venue = re.split(r",? sit[ao]s? ", m[1])[0].strip()
+                if m := re.search(r"ORDEM DE TRABALHOS:?(.*?)(?:Porto de M[óo]s, \d|A PRESIDENTE)", text):
+                    desc = "Ordem de trabalhos: " + m[1].replace("MUNICÍPIO DE PORTO DE MÓS ASSEMBLEIA MUNICIPAL ", "").strip()
+            out.append(
+                event(
+                    source,
+                    title=f"{kind} da Assembleia Municipal (n.º {int(number[0])})",
+                    when=when,
+                    venue=venue,
+                    desc=desc,
+                    link=url,
+                    guid=url,
+                )
+            )
+    return out
+
+
+PARSERS = {"rss": parse_rss, "leiriagenda": parse_leiriagenda, "tjls": parse_tjls, "sessoesam": parse_sessoesam}
 
 
 def source_urls(source: dict, now: dt.datetime) -> list[str]:
@@ -389,25 +462,37 @@ def event_line(e: dict, detail: int = 400) -> str:
     return f"{line} — {extra}" if extra else line
 
 
-def agenda_text(events: list[dict], now: dt.datetime) -> str:
-    """Upcoming events grouped by source, in the order sources are configured.
-    A show listed by two sources (Leiria's agenda also carries the theatres'
-    programme) is kept under the first source only."""
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + dt.timedelta(days=AGENDA_DAYS)
-    blocks, listed = [], set()
+def grouped(events: list[dict], start: dt.datetime, end: dt.datetime, limit) -> list[tuple[dict, list[dict]]]:
+    """Events in [start, end) grouped by source, in the order sources are
+    configured and at most limit(source) per source. A show listed by two
+    sources (Leiria's agenda also carries the theatres' programme) is kept
+    under the first source only."""
+    out, listed = [], set()
     for source in SOURCES:
-        lines = []
+        picked = []
         for e in events:
             key = (re.sub(r"\W+", " ", e["title"].lower()).strip(), e["when"].date())
             if e["source"] != source["name"] or not start <= e["when"] < end or key in listed:
                 continue
-            if len(lines) == AGENDA_MAX:
+            if len(picked) == limit(source):
                 break
             listed.add(key)
-            lines.append(event_line(e))
-        blocks.append(f"{source['name']}:\n" + "\n".join(lines or ["- (nada na agenda)"]))
-    return "\n".join(blocks)
+            picked.append(e)
+        out.append((source, picked))
+    return out
+
+
+def blocks_text(groups: list[tuple[dict, list[dict]]]) -> str:
+    return "\n".join(
+        f"{source['name']}:\n" + "\n".join([event_line(e) for e in picked] or ["- (nada na agenda)"])
+        for source, picked in groups
+    )
+
+
+def agenda_text(events: list[dict], now: dt.datetime) -> str:
+    """The next AGENDA_DAYS days by source, as handed to the model for replies."""
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return blocks_text(grouped(events, start, start + dt.timedelta(days=AGENDA_DAYS), lambda s: AGENDA_MAX))
 
 
 def restaurants_text() -> str:
@@ -447,7 +532,7 @@ class Jay:
                 store_sync_tokens=True, encryption_enabled=True
             ),
         )
-        self.state = load_json(STATE_FILE, {"last_post_day": ""})
+        self.state = {"last_post_day": "", "announced": {}} | load_json(STATE_FILE, {})
         self.reply_times: collections.deque[float] = collections.deque()
         self.started_at = time.time()
         self.room_id = ROOM
@@ -559,8 +644,9 @@ class Jay:
             )
         prompt = (
             f"Hoje é {fmt_date(now.date())}. Agenda dos próximos {AGENDA_DAYS} dias, "
-            "por concelho ou sala, segundo os sites oficiais (Câmaras de Porto de Mós, "
-            f"Batalha e Leiria, e o Teatro José Lúcio da Silva):\n{agenda}\n\n"
+            "por concelho, órgão ou sala, segundo os sites oficiais (Câmaras de Porto de Mós, "
+            "Batalha e Leiria, Assembleia Municipal de Porto de Mós e Teatro José Lúcio da "
+            f"Silva):\n{agenda}\n\n"
             f"{food}"
             "Últimas mensagens da sala, da mais antiga para a mais recente:\n"
             f"{earlier or '(nenhuma)'}\n\n"
@@ -609,40 +695,71 @@ class Jay:
     # -- daily post -------------------------------------------------------
 
     async def daily_post(self) -> None:
-        """Every morning, say what is on today in the mayor's own municipality
-        and what comes next. Raises when the feed gives nothing, so the
-        scheduler retries instead of skipping the day."""
+        """Every morning: what is on today across the region, what comes next
+        in the mayor's own municipality, and a heads-up for what people book
+        ahead: events of sources with a `lead` are announced once, the first
+        morning they are within that many days. Raises when the home feeds give
+        nothing, so the scheduler retries instead of skipping the day."""
         today = dt.datetime.now(TZ).date()
         if self.state["last_post_day"] == today.isoformat():
             return
-        home = [s for s in SOURCES if s.get("home")]
-        events = await self.events(home, max_age=0)
-        if not events:
-            raise RuntimeError("no events from the home feed")
-        on_today = [e for e in events if e["when"].date() == today][:5]
-        upcoming = [e for e in events if today < e["when"].date() <= today + dt.timedelta(days=AGENDA_DAYS)][:3]
+        events = sorted(await self.events(SOURCES, max_age=0), key=lambda e: e["when"])
+        home = {s["name"] for s in SOURCES if s.get("home")}
+        if not any(e["source"] in home for e in events):
+            raise RuntimeError("no events from the home feeds")
+        lead = {s["name"]: s["lead"] for s in SOURCES if s.get("lead")}
+        start = dt.datetime.combine(today, dt.time(0, 0), TZ)
+        on_today = grouped(
+            events, start, start + dt.timedelta(days=1), lambda s: MORNING_HOME if s.get("home") else MORNING_OTHER
+        )
+        upcoming = [
+            e
+            for e in events
+            if e["source"] in home
+            and e["source"] not in lead
+            and today < e["when"].date() <= today + dt.timedelta(days=AGENDA_DAYS)
+        ][:3]
+        ahead = [
+            e
+            for e in events
+            if e["source"] in lead
+            and e["guid"] not in self.state["announced"]
+            and today < e["when"].date() <= today + dt.timedelta(days=lead[e["source"]])
+        ][:MORNING_AHEAD]
 
         def block(evs: list[dict]) -> str:
             return "\n".join(event_line(e) for e in evs) or "- (nada na agenda)"
 
         prompt = (
             f"Hoje é {fmt_date(today)} e esta é a tua mensagem da manhã na sala. "
-            f"Segundo a agenda da Câmara, no teu concelho há hoje:\n{block(on_today)}\n\n"
-            f"E a seguir, nos próximos {AGENDA_DAYS} dias:\n{block(upcoming)}\n\n"
-            "Dá os bons-dias e diz aos munícipes o que há para fazer hoje; se hoje não "
-            "houver nada, diz isso mesmo e aponta o que aí vem. Usa só os dados acima: "
-            "não acrescentes horas, locais, preços ou pormenores que não constem. Podes "
-            "dizer que lá estarás em representação do executivo. Hoje podes ir até 120 "
-            "palavras."
+            f"Segundo as agendas oficiais, hoje há:\n{blocks_text(on_today)}\n\n"
+            f"E a seguir, no teu concelho, nos próximos {AGENDA_DAYS} dias:\n{block(upcoming)}\n\n"
         )
-        text = await asyncio.to_thread(llm, prompt)
-        links = [e["link"] for e in (on_today or upcoming) if e["link"]]
+        if ahead:
+            prompt += (
+                "Avisos com antecedência, para quem precisa de bilhete ou de marcar na agenda "
+                f"(anuncia-os hoje, uma única vez, com a data):\n{block(ahead)}\n\n"
+            )
+        prompt += (
+            "Dá os bons-dias e diz o que há para fazer hoje: primeiro no teu concelho, depois "
+            "o que vale a pena nos vizinhos. Se no teu concelho não houver nada, diz isso mesmo "
+            "e aponta o que aí vem. Usa só os dados acima: não acrescentes horas, locais, "
+            "preços ou pormenores que não constem. Podes dizer que lá estarás em representação "
+            "do executivo. Hoje podes ir até 150 palavras."
+        )
+        text = await asyncio.to_thread(llm, prompt, 400)
+        shown = ahead + [e for _, picked in on_today for e in picked]
+        links = [e["link"] for e in (shown or upcoming) if e["link"]][:6]
         if links:
             text = text + "\n\n" + "\n".join(links)
         await self.send(self.room_id, text)
         self.state["last_post_day"] = today.isoformat()
+        announced = self.state["announced"] | {e["guid"]: e["when"].date().isoformat() for e in ahead}
+        self.state["announced"] = {g: d for g, d in announced.items() if d >= today.isoformat()}
         save_json(STATE_FILE, self.state)
-        log.info("morning post done: %d today, %d upcoming", len(on_today), len(upcoming))
+        log.info(
+            "morning post done: %d today, %d upcoming, %d ahead", len(shown) - len(ahead), len(upcoming), len(ahead)
+        )
 
     async def scheduler(self) -> None:
         while True:
