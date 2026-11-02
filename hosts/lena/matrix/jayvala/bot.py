@@ -532,7 +532,9 @@ class Jay:
                 store_sync_tokens=True, encryption_enabled=True
             ),
         )
-        self.state = {"last_post_day": "", "announced": {}} | load_json(STATE_FILE, {})
+        # heads_up: event guid -> day, for the heads-ups already given. (The
+        # first version kept a list under "announced" in the same file.)
+        self.state = {"last_post_day": "", "heads_up": {}} | load_json(STATE_FILE, {})
         self.reply_times: collections.deque[float] = collections.deque()
         self.started_at = time.time()
         self.room_id = ROOM
@@ -723,7 +725,7 @@ class Jay:
             e
             for e in events
             if e["source"] in lead
-            and e["guid"] not in self.state["announced"]
+            and e["guid"] not in self.state["heads_up"]
             and today < e["when"].date() <= today + dt.timedelta(days=lead[e["source"]])
         ][:MORNING_AHEAD]
 
@@ -754,8 +756,8 @@ class Jay:
             text = text + "\n\n" + "\n".join(links)
         await self.send(self.room_id, text)
         self.state["last_post_day"] = today.isoformat()
-        announced = self.state["announced"] | {e["guid"]: e["when"].date().isoformat() for e in ahead}
-        self.state["announced"] = {g: d for g, d in announced.items() if d >= today.isoformat()}
+        heads_up = self.state["heads_up"] | {e["guid"]: e["when"].date().isoformat() for e in ahead}
+        self.state["heads_up"] = {g: d for g, d in heads_up.items() if d >= today.isoformat()}
         save_json(STATE_FILE, self.state)
         log.info(
             "morning post done: %d today, %d upcoming, %d ahead", len(shown) - len(ahead), len(upcoming), len(ahead)
