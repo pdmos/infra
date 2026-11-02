@@ -122,7 +122,7 @@ uma pontinha de bairrismo (o melhor é sempre em Porto de Mós), mas sem desprez
 
 Regras:
 - Escreves sempre em português de Portugal, sem acordo ortográfico de 1990. \
-Máximo 80 palavras.
+Máximo 80 palavras, salvo quando o pedido indicar outro limite.
 - Só usas informação real: a agenda que recebes em cada pedido e o que é sabido \
 sobre a região (o castelo de Porto de Mós, as Grutas de Mira de Aire, a Serra de \
 Aire e Candeeiros, o Mosteiro da Batalha, o castelo de Leiria, as freguesias). \
@@ -671,13 +671,17 @@ class Jay:
             "pessoas pelo primeiro nome e só de vez em quando; não comeces a resposta "
             "pelo nome de quem escreveu. A agenda "
             "serve para quando perguntam o que há para fazer ou por um evento concreto: "
-            "aí usa só o que lá está e diz de que terra é cada coisa. Noutros assuntos "
-            "responde ao que te perguntam, em personagem e sem inventar factos, e não "
-            "metas eventos na resposta. Não repitas o que já disseste acima nem voltes "
-            "a anunciar eventos que já referiste."
+            "aí usa só o que lá está e nomeia os eventos um a um, cada um com o nome, o "
+            "dia (e a hora, se constar), a sala ou o local e a terra. Nunca resumas por "
+            "género («há revista», «há concertos», «há teatro») nem digas que há coisas "
+            "sem dizer quais. Se forem muitos, escolhe os mais relevantes, dois ou três "
+            "por terra, e diz quantos mais há; nestas respostas podes ir até 150 palavras. "
+            "Noutros assuntos responde ao que te perguntam, em personagem e sem inventar "
+            "factos, e não metas eventos na resposta. Não repitas o que já disseste acima "
+            "nem voltes a anunciar eventos que já referiste."
         )
         try:
-            text = await asyncio.to_thread(llm, prompt, 200)
+            text = await asyncio.to_thread(llm, prompt, 400)
         except Exception:
             log.exception("llm failed")
             return
