@@ -490,9 +490,23 @@ def blocks_text(groups: list[tuple[dict, list[dict]]]) -> str:
 
 
 def agenda_text(events: list[dict], now: dt.datetime) -> str:
-    """The next AGENDA_DAYS days by source, as handed to the model for replies."""
+    """The next AGENDA_DAYS days by source, as handed to the model for replies.
+    A source's `note` (how often it meets, say) goes in its heading, and a
+    source with nothing coming shows its latest past event instead, so the
+    model can say when things last happened."""
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return blocks_text(grouped(events, start, start + dt.timedelta(days=AGENDA_DAYS), lambda s: AGENDA_MAX))
+    blocks = []
+    for source, picked in grouped(events, start, start + dt.timedelta(days=AGENDA_DAYS), lambda s: AGENDA_MAX):
+        heading = source["name"] + (f" ({source['note']})" if source.get("note") else "")
+        lines = [event_line(e) for e in picked]
+        if not lines:
+            past = [e for e in events if e["source"] == source["name"] and e["when"] < start]
+            lines = [f"- nada marcado nos próximos {AGENDA_DAYS} dias"]
+            if past:
+                last = max(past, key=lambda e: e["when"])
+                lines[0] += f"; o último registo foi {fmt_date(last['when'].date())}: {last['title']}"
+        blocks.append(f"{heading}:\n" + "\n".join(lines))
+    return "\n".join(blocks)
 
 
 def restaurants_text() -> str:

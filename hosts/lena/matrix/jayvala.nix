@@ -10,7 +10,8 @@ let
   # Where the bot reads events from. `home` marks the mayor's own municipality,
   # whose coming events get the "what's next" of the morning post. `lead` makes
   # the morning post announce a source's events once, that many days ahead, for
-  # what people need to book or plan (tickets, the assembly sessions).
+  # what people need to book or plan (tickets, the assembly sessions). `note`
+  # is context the model gets with the source's agenda, such as how often it meets.
   sources = [
     {
       name = "Porto de Mós";
@@ -23,6 +24,7 @@ let
       kind = "sessoesam";
       url = "https://www.municipio-portodemos.pt/p/sessoesam";
       lead = 5;
+      note = "cinco sessões ordinárias por ano, em Fevereiro, Abril, Junho, Setembro e Dezembro; a convocatória sai cerca de uma semana antes";
     }
     {
       name = "Batalha";
