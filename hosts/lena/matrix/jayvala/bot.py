@@ -1,8 +1,8 @@
 """Jay Vala — a fictional mayor of Porto de Mós who lives in our Matrix rooms.
 
 Two jobs:
-  * every morning, post what is on today across the region, what comes next
-    in his own municipality and a one-time heads-up for what people book
+  * every morning there is something to announce, post what is on today and
+    tomorrow across the region and a one-time heads-up for what people book
     ahead (sources with a `lead`), in the voice of a small-town mayor;
   * reply, in character, when someone mentions him, replies to one of his
     messages, or keeps asking him things right after he answered them. The
@@ -711,11 +711,12 @@ class Jay:
     # -- daily post -------------------------------------------------------
 
     async def daily_post(self) -> None:
-        """Every morning: what is on today across the region, what comes next
-        in the mayor's own municipality, and a heads-up for what people book
+        """Every morning there is something to announce: what is on today and
+        tomorrow across the region, and a heads-up for what people book
         ahead: events of sources with a `lead` are announced once, the first
-        morning they are within that many days. Raises when the home feeds give
-        nothing, so the scheduler retries instead of skipping the day."""
+        morning they are within that many days. A morning with nothing to
+        announce gets no post. Raises when the home feeds give nothing, so the
+        scheduler retries instead of skipping the day."""
         today = dt.datetime.now(TZ).date()
         if self.state["last_post_day"] == today.isoformat():
             return
@@ -725,57 +726,62 @@ class Jay:
             raise RuntimeError("no events from the home feeds")
         lead = {s["name"]: s["lead"] for s in SOURCES if s.get("lead")}
         start = dt.datetime.combine(today, dt.time(0, 0), TZ)
-        on_today = grouped(
-            events, start, start + dt.timedelta(days=1), lambda s: MORNING_HOME if s.get("home") else MORNING_OTHER
-        )
-        upcoming = [
-            e
-            for e in events
-            if e["source"] in home
-            and e["source"] not in lead
-            and today < e["when"].date() <= today + dt.timedelta(days=AGENDA_DAYS)
-        ][:3]
+        day = dt.timedelta(days=1)
+
+        def limit(source: dict) -> int:
+            return MORNING_HOME if source.get("home") else MORNING_OTHER
+
+        on_today = grouped(events, start, start + day, limit)
+        tomorrow = grouped(events, start + day, start + 2 * day, limit)
         ahead = [
             e
             for e in events
             if e["source"] in lead
             and e["guid"] not in self.state["heads_up"]
-            and today < e["when"].date() <= today + dt.timedelta(days=lead[e["source"]])
+            and today + day < e["when"].date() <= today + dt.timedelta(days=lead[e["source"]])
         ][:MORNING_AHEAD]
-
-        def block(evs: list[dict]) -> str:
-            return "\n".join(event_line(e) for e in evs) or "- (nada na agenda)"
+        if not ahead and not any(picked for _, picked in on_today + tomorrow):
+            log.info("nothing to announce this morning")
+            self.mark_posted(today, ahead)
+            return
 
         prompt = (
             f"Hoje é {fmt_date(today)} e esta é a tua mensagem da manhã na sala. "
             f"Segundo as agendas oficiais, hoje há:\n{blocks_text(on_today)}\n\n"
-            f"E a seguir, no teu concelho, nos próximos {AGENDA_DAYS} dias:\n{block(upcoming)}\n\n"
+            f"E amanhã, {fmt_date(today + day)}:\n{blocks_text(tomorrow)}\n\n"
         )
         if ahead:
+            by_source = [(s, [e for e in ahead if e["source"] == s["name"]]) for s in SOURCES]
             prompt += (
                 "Avisos com antecedência, para quem precisa de bilhete ou de marcar na agenda "
-                f"(anuncia-os hoje, uma única vez, com a data):\n{block(ahead)}\n\n"
+                f"(anuncia-os hoje, uma única vez, com a data):\n"
+                f"{blocks_text([(s, picked) for s, picked in by_source if picked])}\n\n"
             )
         prompt += (
-            "Dá os bons-dias e diz o que há para fazer hoje: primeiro no teu concelho, depois "
-            "o que vale a pena nos vizinhos. Se no teu concelho não houver nada, diz isso mesmo "
-            "e aponta o que aí vem. Usa só os dados acima: não acrescentes horas, locais, "
-            "preços ou pormenores que não constem. Podes dizer que lá estarás em representação "
-            "do executivo. Hoje podes ir até 150 palavras."
+            "Dá os bons-dias e anuncia o que há hoje e amanhã, primeiro no teu concelho e depois "
+            "nos vizinhos. Para cada evento que referires diz o nome, o dia (e a hora, se constar) "
+            "e o sítio, a sala ou o local e a terra, para que se perceba onde é o quê; antes "
+            "referir menos eventos do que deixá-los sem sítio. Se forem muitos, escolhe os mais "
+            "relevantes e diz quantos mais há em cada terra. Onde não há nada, diz isso numa frase "
+            "e não enchas com generalidades sobre a região. Usa só os dados acima: não acrescentes "
+            "horas, locais, preços ou pormenores que não constem. Podes dizer que lá estarás em "
+            "representação do executivo. Hoje podes ir até 180 palavras."
         )
-        text = await asyncio.to_thread(llm, prompt, 400)
-        shown = ahead + [e for _, picked in on_today for e in picked]
-        links = [e["link"] for e in (shown or upcoming) if e["link"]][:6]
+        text = await asyncio.to_thread(llm, prompt, 450)
+        shown = ahead + [e for _, picked in on_today + tomorrow for e in picked]
+        links = [e["link"] for e in shown if e["link"]][:6]
         if links:
             text = text + "\n\n" + "\n".join(links)
         await self.send(self.room_id, text)
+        self.mark_posted(today, ahead)
+        log.info("morning post done: %d today or tomorrow, %d ahead", len(shown) - len(ahead), len(ahead))
+
+    def mark_posted(self, today: dt.date, ahead: list[dict]) -> None:
+        """Remember that this morning is dealt with and which heads-ups were given."""
         self.state["last_post_day"] = today.isoformat()
         heads_up = self.state["heads_up"] | {e["guid"]: e["when"].date().isoformat() for e in ahead}
         self.state["heads_up"] = {g: d for g, d in heads_up.items() if d >= today.isoformat()}
         save_json(STATE_FILE, self.state)
-        log.info(
-            "morning post done: %d today, %d upcoming, %d ahead", len(shown) - len(ahead), len(upcoming), len(ahead)
-        )
 
     async def scheduler(self) -> None:
         while True:

@@ -7,9 +7,9 @@ let
     ps.pypdf
   ]);
 
-  # Where the bot reads events from. `home` marks the mayor's own municipality,
-  # whose coming events get the "what's next" of the morning post. `lead` makes
-  # the morning post announce a source's events once, that many days ahead, for
+  # Where the bot reads events from. `home` marks the mayor's own municipality:
+  # it comes first and gets more room in the morning post. `lead` makes the
+  # morning post announce a source's events once, that many days ahead, for
   # what people need to book or plan (tickets, the assembly sessions). `note`
   # is context the model gets with the source's agenda, such as how often it meets.
   sources = [
