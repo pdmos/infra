@@ -336,10 +336,11 @@ def parse_sessoesam(body: bytes, source: dict) -> list[dict]:
     convocatória (and later the minutes) of each municipal assembly session,
     dated with the session day. Unlike the other parsers this one fetches
     more: this year's folder and, for sessions still to come, the
-    convocatória PDF, which gives the time, the venue and the agenda."""
+    convocatória PDF, which gives the time, the venue and the agenda. A
+    cached PDF is dropped once its session is over."""
     today = dt.datetime.now(TZ).date()
     slug = re.sub(r"[^a-z0-9]+", "-", source["name"].lower())
-    out = []
+    out, pdfs = [], set()
     for a in BeautifulSoup(body, "html.parser").select("a.folder"):
         year = a.get_text(strip=True)
         if not (year.isdigit() and int(year) >= today.year):
@@ -358,7 +359,9 @@ def parse_sessoesam(body: bytes, source: dict) -> list[dict]:
                 continue
             url = urllib.parse.urljoin(source["url"], link["href"])
             kind, when, venue, desc = "Sessão", dt.datetime.combine(day, dt.time(0, 0), TZ), "", ""
-            if day >= today and (pdf := fetch(url, CACHE_DIR / f"{slug}-{year}-{number[0]}.pdf")):
+            pdf_file = CACHE_DIR / f"{slug}-{year}-{number[0]}.pdf"
+            if day >= today and (pdf := fetch(url, pdf_file)):
+                pdfs.add(pdf_file)
                 try:
                     text = pdf_text(pdf)
                 except Exception:
@@ -386,6 +389,9 @@ def parse_sessoesam(body: bytes, source: dict) -> list[dict]:
                     guid=url,
                 )
             )
+    for stale in set(CACHE_DIR.glob(f"{slug}-*.pdf")) - pdfs:
+        stale.unlink()
+        stale.with_suffix(".etag").unlink(missing_ok=True)
     return out
 
 
