@@ -227,7 +227,9 @@ def strip_html(text: str | None) -> str:
 
 
 def event(source: dict, **fields) -> dict:
-    return {"source": source["name"], "venue": "", "place": "", "desc": "", "end": None} | fields
+    """An event as the parsers build it; `sessions` holds the day's further
+    showtimes ("HH:MM") after the one in `when`."""
+    return {"source": source["name"], "venue": "", "place": "", "desc": "", "end": None, "sessions": []} | fields
 
 
 def cache_slug(source: dict) -> str:
@@ -455,8 +457,7 @@ def detail_tjls(soup: BeautifulSoup, e: dict) -> dict:
         times = m[1].split(" e ")
         hour, minute = times[0].split(":")
         out["when"] = e["when"].replace(hour=int(hour), minute=int(minute))
-        if len(times) > 1:
-            facts.append("sessões às " + " e ".join(times))
+        out["sessions"] = times[1:]
     if m := re.search(r"Classificação/Público: (\S+)", side):
         facts.append(m[1])
     if m := re.search(r"Duração: (\d+ ?min)", side):
@@ -556,7 +557,7 @@ def fmt_when(e: dict) -> str:
     if e["end"]:
         text += f" a {WEEKDAYS[e['end'].weekday()]} {e['end']:%d/%m}"
     elif (when.hour, when.minute) != (0, 0):
-        text += f" às {when:%H:%M}"
+        text += " às " + " e ".join([f"{when:%H:%M}", *e["sessions"]])
     return text
 
 
@@ -807,7 +808,8 @@ class Jay:
             "pelo nome de quem escreveu. A agenda "
             "serve para quando perguntam o que há para fazer ou por um evento concreto: "
             "aí usa só o que lá está e nomeia os eventos um a um, cada um com o nome, o "
-            "dia (e a hora, se constar), a sala ou o local e a terra. Nunca resumas por "
+            "dia (e a hora, ou as horas das sessões, se constarem), a sala ou o local e a terra. "
+            "Nunca resumas por "
             "género («há revista», «há concertos», «há teatro») nem digas que há coisas "
             "sem dizer quais. Se forem muitos, escolhe os mais relevantes, dois ou três "
             "por terra, e diz quantos mais há; nestas respostas podes ir até 150 palavras. "
@@ -891,7 +893,8 @@ class Jay:
             f"Segundo as agendas oficiais, hoje há:\n{blocks_text(on_today)}\n\n"
             f"E amanhã, {fmt_date(start.date() + day)}:\n{blocks_text(tomorrow)}\n\n"
             "Dá os bons-dias e anuncia o que há hoje e amanhã, primeiro no teu concelho e depois "
-            "nos vizinhos. Para cada evento que referires diz o nome, o dia (e a hora, se constar) "
+            "nos vizinhos. Para cada evento que referires diz o nome, o dia (e a hora, ou as horas "
+            "das sessões, se constarem) "
             "e o sítio, a sala ou o local e a terra, para que se perceba onde é o quê; antes "
             "referir menos eventos do que deixá-los sem sítio. Se forem muitos, escolhe os mais "
             "relevantes e diz quantos mais há em cada terra. Fala só das terras que constam acima; "
