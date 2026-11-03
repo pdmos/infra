@@ -8,13 +8,14 @@ Two jobs:
     messages, or keeps asking him things right after he answered them. The
     reply prompt carries the upcoming agenda of the whole region and the last
     messages of the room, so answers stay factual and he does not repeat
-    himself.
+    himself; the links of the events he names go at the end of the reply.
 
 Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
 the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), the sessions
 of Porto de Mós' municipal assembly (HTML listing plus the convocatória PDF),
 Leiria's agenda site and the programme of Leiria's municipal theatres (both
-HTML).
+HTML). Each coming event's own page is read as well, for what the listings
+lack: the text, the venue, the time.
 A curated list of places to eat (JAYVALA_RESTAURANTS, see restaurantes.json)
 is added to the prompt only when the message is about food. Secrets come from
 systemd credentials.
@@ -24,6 +25,7 @@ import asyncio
 import collections
 import datetime as dt
 import email.utils
+import hashlib
 import html
 import io
 import json
@@ -31,6 +33,7 @@ import logging
 import os
 import re
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -93,6 +96,7 @@ FOOD_WORDS = re.compile(
 AGENDA_DAYS = 14
 AGENDA_MAX = 8
 FEED_MAX_AGE = 3 * 3600
+DETAIL_MAX_AGE = 20 * 3600  # an event's page, read for the morning post, lasts the day
 LEIRIAGENDA_PAGE = 14  # results per listing page on leiriagenda.cm-leiria.pt
 HISTORY = 12  # messages per room kept as context for replies
 FOLLOW_UP = 180  # seconds during which whoever Jay just answered keeps his attention
@@ -224,6 +228,16 @@ def event(source: dict, **fields) -> dict:
     return {"source": source["name"], "venue": "", "place": "", "desc": "", "end": None} | fields
 
 
+def cache_slug(source: dict) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", source["name"].lower())
+
+
+def plain(text: str) -> str:
+    """Lower-case ASCII words with single spaces, padded, for loose matching."""
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return " " + re.sub(r"[^a-z0-9]+", " ", text.lower()).strip() + " "
+
+
 def parse_rss(body: bytes, source: dict) -> list[dict]:
     """The municipal CMS feeds (Porto de Mós, Batalha): pubDate is the event's
     start and the description, when present, holds the details."""
@@ -339,7 +353,7 @@ def parse_sessoesam(body: bytes, source: dict) -> list[dict]:
     convocatória PDF, which gives the time, the venue and the agenda. A
     cached PDF is dropped once its session is over."""
     today = dt.datetime.now(TZ).date()
-    slug = re.sub(r"[^a-z0-9]+", "-", source["name"].lower())
+    slug = cache_slug(source)
     out, pdfs = [], set()
     for a in BeautifulSoup(body, "html.parser").select("a.folder"):
         year = a.get_text(strip=True)
@@ -398,6 +412,88 @@ def parse_sessoesam(body: bytes, source: dict) -> list[dict]:
 PARSERS = {"rss": parse_rss, "leiriagenda": parse_leiriagenda, "tjls": parse_tjls, "sessoesam": parse_sessoesam}
 
 
+# -------------------------------------------------------------- details --
+
+
+def detail_cms(soup: BeautifulSoup, e: dict) -> dict:
+    """Event page of the municipal CMS: the venue (parish after a bar), the
+    time, the organiser, the price and the text the feed may lack."""
+
+    def field(name: str) -> str:
+        el = soup.select_one(f".event_detail .{name} .widget_value")
+        return " ".join(el.get_text(" ", strip=True).split()) if el else ""
+
+    out = {}
+    if venue := field("location"):
+        out["venue"], _, place = (x.strip() for x in venue.partition(" | "))
+        if place:
+            out["place"] = place
+    if (m := re.match(r"(\d{1,2})h(\d{2})", field("schedule"))) and e["when"].hour == e["when"].minute == 0:
+        out["when"] = e["when"].replace(hour=int(m[1]), minute=int(m[2]))
+    facts = [f"{label}: {field(name)}" for name, label in (("entity", "Organização"), ("price", "Preço")) if field(name)]
+    out["desc"] = ". ".join(x for x in facts + [e["desc"] or field("text")] if x)
+    return out
+
+
+def detail_leiriagenda(soup: BeautifulSoup, e: dict) -> dict:
+    """leiriagenda.cm-leiria.pt event page: the synopsis."""
+    el = soup.select_one(".sinopse")
+    text = re.sub(r"^Sinopse\s*", "", " ".join(el.get_text(" ", strip=True).split())) if el else ""
+    return {"desc": ". ".join(x for x in (e["desc"], text) if x)} if text else {}
+
+
+def detail_tjls(soup: BeautifulSoup, e: dict) -> dict:
+    """teatrojlsilva.pt show page: the text, the sessions (the listing gives
+    no time), the age rating and the duration, all from the side box."""
+    out = {}
+    side = soup.select_one("div.bg-gray-50")
+    side = " ".join(side.get_text(" ", strip=True).split()) if side else ""
+    facts = [e["desc"]]
+    if m := re.search(r"\| (\d{1,2}:\d{2}(?: e \d{1,2}:\d{2})*)", side):
+        times = m[1].split(" e ")
+        hour, minute = times[0].split(":")
+        out["when"] = e["when"].replace(hour=int(hour), minute=int(minute))
+        if len(times) > 1:
+            facts.append("sessões às " + " e ".join(times))
+    if m := re.search(r"Classificação/Público: (\S+)", side):
+        facts.append(m[1])
+    if m := re.search(r"Duração: (\d+ ?min)", side):
+        facts.append(m[1])
+    prose = soup.select_one("div.prose")
+    text = " ".join(prose.get_text(" ", strip=True).split()) if prose else ""
+    out["desc"] = ". ".join(x for x in ["; ".join(f for f in facts if f), text] if x)
+    return out
+
+
+DETAILS = {"rss": detail_cms, "leiriagenda": detail_leiriagenda, "tjls": detail_tjls}
+
+
+def add_details(source: dict, events: list[dict], now: dt.datetime) -> None:
+    """Fill in what the listing lacks from each event's own page, for the
+    events of the agenda window. A page is kept for DETAIL_MAX_AGE and
+    dropped once its event leaves the window."""
+    parse, slug, kept = DETAILS.get(source["kind"]), cache_slug(source), set()
+    today = now.date()
+    for e in events if parse else []:
+        if not e["link"] or not today <= e["when"].date() <= today + dt.timedelta(days=AGENDA_DAYS):
+            continue
+        page = CACHE_DIR / f"{slug}-detail-{hashlib.sha1(e['guid'].encode()).hexdigest()[:12]}.html"
+        kept.add(page)
+        fresh = page.exists() and time.time() - page.stat().st_mtime < DETAIL_MAX_AGE
+        body = page.read_bytes() if fresh else fetch(e["link"], page)
+        if not body:
+            continue
+        if not fresh:
+            page.touch()
+        try:
+            e.update(parse(BeautifulSoup(body, "html.parser"), e))
+        except Exception:
+            log.exception("%s: cannot read %s", source["name"], e["link"])
+    for stale in set(CACHE_DIR.glob(f"{slug}-detail-*.html")) - kept:
+        stale.unlink()
+        stale.with_suffix(".etag").unlink(missing_ok=True)
+
+
 def source_urls(source: dict, now: dt.datetime) -> list[str]:
     """The requests needed to cover the agenda window for one source."""
     url, kind = source["url"], source["kind"]
@@ -422,7 +518,7 @@ def source_urls(source: dict, now: dt.datetime) -> list[str]:
 def load_source(source: dict, now: dt.datetime) -> list[dict]:
     """Fetch and parse everything one source publishes for the agenda window."""
     CACHE_DIR.mkdir(exist_ok=True)
-    slug = re.sub(r"[^a-z0-9]+", "-", source["name"].lower())
+    slug = cache_slug(source)
     events, seen = [], set()
     for n, url in enumerate(source_urls(source, now)):
         body = fetch(url, CACHE_DIR / f"{slug}-{n}.body")
@@ -439,6 +535,7 @@ def load_source(source: dict, now: dt.datetime) -> list[dict]:
             if e["guid"] not in seen:
                 seen.add(e["guid"])
                 events.append(e)
+    add_details(source, events, now)
     events.sort(key=lambda e: e["when"])
     log.info("%s: %d event(s)", source["name"], len(events))
     return events
@@ -477,7 +574,7 @@ def grouped(events: list[dict], start: dt.datetime, end: dt.datetime, limit) -> 
     for source in SOURCES:
         picked = []
         for e in events:
-            key = (re.sub(r"\W+", " ", e["title"].lower()).strip(), e["when"].date())
+            key = (plain(e["title"]), e["when"].date())
             if e["source"] != source["name"] or not start <= e["when"] < end or key in listed:
                 continue
             if len(picked) == limit(source):
@@ -513,6 +610,24 @@ def agenda_text(events: list[dict], now: dt.datetime) -> str:
                 lines[0] += f"; o último registo foi {fmt_date(last['when'].date())}: {last['title']}"
         blocks.append(f"{heading}:\n" + "\n".join(lines))
     return "\n".join(blocks)
+
+
+def event_links(text: str, events: list[dict], now: dt.datetime, limit: int = 4) -> list[str]:
+    """Links of the agenda events the text names, in the order it names them.
+    A title counts as named when it appears whole, or when all its words of
+    three letters or more do (the model drops a "+" or adds a "com")."""
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    haystack, found = plain(text), {}
+    for e in events:
+        title = plain(e["title"])
+        words = [w for w in title.split() if len(w) >= 3]
+        if not e["link"] or not words or title in found or not start <= e["when"] < start + dt.timedelta(days=AGENDA_DAYS):
+            continue
+        if (pos := haystack.find(title)) < 0 and len(words) >= 2 and all(f" {w} " in haystack for w in words):
+            pos = min(haystack.find(f" {w} ") for w in words)
+        if pos >= 0:
+            found[title] = (pos, e["link"])
+    return [link for _, link in sorted(found.values())][:limit]
 
 
 def restaurants_text() -> str:
@@ -654,7 +769,8 @@ class Jay:
             log.info("reply rate limit hit, staying quiet")
             return
         now = dt.datetime.now(TZ)
-        agenda = agenda_text(await self.events(SOURCES), now)
+        events = await self.events(SOURCES)
+        agenda = agenda_text(events, now)
         food = ""
         if FOOD_WORDS.search(body):
             food = (
@@ -684,13 +800,18 @@ class Jay:
             "por terra, e diz quantos mais há; nestas respostas podes ir até 150 palavras. "
             "Noutros assuntos responde ao que te perguntam, em personagem e sem inventar "
             "factos, e não metas eventos na resposta. Não repitas o que já disseste acima "
-            "nem voltes a anunciar eventos que já referiste."
+            "nem voltes a anunciar eventos que já referiste. Quando te pedem o link ou mais "
+            "pormenores de um evento, repete o nome dele na resposta: os links dos eventos "
+            "que nomeias são acrescentados no fim da mensagem, por isso nunca digas que não "
+            "os tens."
         )
         try:
             text = await asyncio.to_thread(llm, prompt, 400)
         except Exception:
             log.exception("llm failed")
             return
+        if links := event_links(text, events, now):
+            text += "\n\n" + "\n".join(links)
         await self.send(room.room_id, text)
         self.last_reply[event.sender] = time.time()
 

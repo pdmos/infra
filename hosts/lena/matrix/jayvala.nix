@@ -31,16 +31,18 @@ let
       kind = "rss";
       url = "https://www.cm-batalha.pt/pages/322.rss";
     }
-    {
-      name = "Leiria";
-      kind = "leiriagenda";
-      url = "https://leiriagenda.cm-leiria.pt/pt/agenda";
-    }
+    # The theatres come before Leiria's agenda, which lists their shows too:
+    # a show is kept under the first source that has it, with that page.
     {
       name = "Teatros de Leiria";
       kind = "tjls";
       url = "https://teatrojlsilva.pt/programacao/eventos";
       lead = 5;
+    }
+    {
+      name = "Leiria";
+      kind = "leiriagenda";
+      url = "https://leiriagenda.cm-leiria.pt/pt/agenda";
     }
   ];
 in
