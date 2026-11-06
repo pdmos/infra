@@ -1,9 +1,10 @@
 """Jay Vala — a fictional mayor of Porto de Mós who lives in our Matrix rooms.
 
 Two jobs:
-  * every morning there is something to announce, post what is on today and
-    tomorrow across the region, and on Sundays the whole coming week, in the
-    voice of a small-town mayor;
+  * every morning there is something to announce, post the list of what is
+    on today and tomorrow across the region, and on Sundays of the whole
+    coming week: name, place, day and time of each event, the name linking
+    to its page;
   * reply, in character, when someone mentions him, replies to one of his
     messages, or keeps asking him things right after he answered them. The
     reply prompt carries the upcoming agenda of the whole region and the last
@@ -589,23 +590,46 @@ def grouped(events: list[dict], start: dt.datetime, end: dt.datetime, limit) -> 
     return out
 
 
-def blocks_text(groups: list[tuple[dict, list[dict]]], detail: int = 400) -> str:
-    return "\n".join(
-        f"{source['name']}:\n" + "\n".join([event_line(e, detail) for e in picked] or ["- (nada na agenda)"])
-        for source, picked in groups
-    )
+def programme(events: list[dict], start: dt.datetime, days: int, cap) -> list[tuple[dict, list[dict], int]]:
+    """What the morning post lists from start on, by source: of each day, at
+    most cap(source) events of a source (all of them when that is None), and
+    how many were left out. A source with nothing on stays out, except the
+    home municipality, whose empty days are worth a line."""
+    picked = {source["name"]: [] for source in SOURCES}
+    left = dict.fromkeys(picked, 0)
+    for n in range(days):
+        day = start + dt.timedelta(days=n)
+        for source, found in grouped(events, day, day + dt.timedelta(days=1), lambda source: None):
+            kept = found[: cap(source)]
+            picked[source["name"]] += kept
+            left[source["name"]] += len(found) - len(kept)
+    return [(s, picked[s["name"]], left[s["name"]]) for s in SOURCES if picked[s["name"]] or s.get("home")]
 
 
-def programme(events: list[dict], start: dt.datetime, span: dt.timedelta, limit) -> list[tuple[dict, list[dict]]]:
-    """What is on in [start, start + span) by source, for the morning post: a
-    source with nothing on stays out, except the home municipality, whose
-    empty day is worth a word."""
-    groups = grouped(events, start, start + span, limit)
-    return [(source, picked) for source, picked in groups if picked or source.get("home")]
-
-
-def with_links(text: str, links: list[str]) -> str:
-    return text + "\n\n" + "\n".join(links) if links else text
+def brief(header: str, groups: list[tuple[dict, list[dict], int]]) -> tuple[str, str]:
+    """The morning post, as plain text and as HTML: under the header, each
+    source with its events, one per line with the name, the place, the day
+    and the time; in the HTML the name links to the event's page."""
+    footer = "Para saber mais de algum evento, responde a esta mensagem."
+    text, markup = [header], [f"<p>{html.escape(header)}</p>"]
+    for source, picked, left in groups:
+        lines = []
+        for e in picked:
+            where = ", ".join(x for x in (e["venue"], e["place"]) if x)
+            rest = " — ".join(x for x in (where, fmt_when(e)) if x)
+            name = html.escape(e["title"])
+            if e["link"]:
+                name = f'<a href="{html.escape(e["link"])}">{name}</a>'
+            lines.append((f"{e['title']} — {rest}", f"{name} — {html.escape(rest)}"))
+        if left:
+            lines.append((f"e mais {left}", f"e mais {left}"))
+        lines = lines or [("nada na agenda", "nada na agenda")]
+        text += ["", source["name"]] + [f"• {t}" for t, _ in lines]
+        items = "".join(f"<li>{h}</li>" for _, h in lines)
+        markup.append(f"<p><b>{html.escape(source['name'])}</b></p><ul>{items}</ul>")
+    text += ["", footer]
+    markup.append(f"<p>{footer}</p>")
+    return "\n".join(text), "".join(markup)
 
 
 def agenda_text(events: list[dict], now: dt.datetime) -> str:
@@ -727,13 +751,12 @@ class Jay:
         )
         log.info("logged in as %s, device %s", resp.user_id, resp.device_id)
 
-    async def send(self, room_id: str, text: str) -> None:
-        await self.client.room_send(
-            room_id,
-            "m.room.message",
-            {"msgtype": "m.text", "body": text},
-            ignore_unverified_devices=True,
-        )
+    async def send(self, room_id: str, text: str, markup: str = "") -> None:
+        """Send text, with its HTML version (formatted_body) when given."""
+        content = {"msgtype": "m.text", "body": text}
+        if markup:
+            content |= {"format": "org.matrix.custom.html", "formatted_body": markup}
+        await self.client.room_send(room_id, "m.room.message", content, ignore_unverified_devices=True)
 
     # -- sources ----------------------------------------------------------
 
@@ -825,7 +848,8 @@ class Jay:
         except Exception:
             log.exception("llm failed")
             return
-        text = with_links(text, event_links(text, events, now))
+        if links := event_links(text, events, now):
+            text += "\n\n" + "\n".join(links)
         await self.send(room.room_id, text)
         self.last_reply[event.sender] = time.time()
 
@@ -856,10 +880,10 @@ class Jay:
     # -- daily post -------------------------------------------------------
 
     async def daily_post(self) -> None:
-        """Every morning there is something to announce, post it: what is on
-        today and tomorrow across the region, or on Sundays the whole coming
-        week. Raises when the home feeds give nothing, so the scheduler
-        retries instead of skipping the day."""
+        """Every morning there is something to announce, post the list: today
+        and tomorrow across the region, or on Sundays the whole coming week.
+        Raises when the home feeds give nothing, so the scheduler retries
+        instead of skipping the day."""
         today = dt.datetime.now(TZ).date()
         if self.state["last_post_day"] == today.isoformat():
             return
@@ -867,68 +891,20 @@ class Jay:
         home = {s["name"] for s in SOURCES if s.get("home")}
         if not any(e["source"] in home for e in events):
             raise RuntimeError("no events from the home feeds")
-        post = self.week_post if today.weekday() == WEEKLY_POST_DAY else self.day_post
-        if text := await post(events, dt.datetime.combine(today, dt.time(0, 0), TZ)):
-            await self.send(self.room_id, text)
+        start = dt.datetime.combine(today, dt.time(0, 0), TZ)
+        if today.weekday() == WEEKLY_POST_DAY:
+            header = "Bom domingo! A agenda da semana:"
+            groups = programme(events, start, WEEK_DAYS, lambda source: None)
+        else:
+            header = "Bom dia! A agenda de hoje e de amanhã:"
+            groups = programme(events, start, 2, lambda source: MORNING_HOME if source.get("home") else MORNING_OTHER)
+        if shown := sum(len(picked) for _, picked, _ in groups):
+            await self.send(self.room_id, *brief(header, groups))
+            log.info("morning post: %d events", shown)
         else:
             log.info("nothing to announce this morning")
         self.state["last_post_day"] = today.isoformat()
         save_json(STATE_FILE, self.state)
-
-    async def day_post(self, events: list[dict], start: dt.datetime) -> str:
-        """Today and tomorrow told by the mayor, with the links of what he was
-        given. Empty when there is nothing on."""
-        day = dt.timedelta(days=1)
-
-        def limit(source: dict) -> int:
-            return MORNING_HOME if source.get("home") else MORNING_OTHER
-
-        on_today = programme(events, start, day, limit)
-        tomorrow = programme(events, start + day, day, limit)
-        shown = [e for _, picked in on_today + tomorrow for e in picked]
-        if not shown:
-            return ""
-        prompt = (
-            f"Hoje é {fmt_date(start.date())} e esta é a tua mensagem da manhã na sala. "
-            f"Segundo as agendas oficiais, hoje há:\n{blocks_text(on_today)}\n\n"
-            f"E amanhã, {fmt_date(start.date() + day)}:\n{blocks_text(tomorrow)}\n\n"
-            "Dá os bons-dias e anuncia o que há hoje e amanhã, primeiro no teu concelho e depois "
-            "nos vizinhos. Para cada evento que referires diz o nome, o dia (e a hora, ou as horas "
-            "das sessões, se constarem) "
-            "e o sítio, a sala ou o local e a terra, para que se perceba onde é o quê; antes "
-            "referir menos eventos do que deixá-los sem sítio. Se forem muitos, escolhe os mais "
-            "relevantes e diz quantos mais há em cada terra. Fala só das terras que constam acima; "
-            "se no teu concelho não há nada num dos dias, diz isso numa frase e não enchas com "
-            "generalidades sobre a região. Usa só os dados acima: não acrescentes "
-            "horas, locais, preços ou pormenores que não constem. Podes dizer que lá estarás em "
-            "representação do executivo. Hoje podes ir até 180 palavras."
-        )
-        text = await asyncio.to_thread(llm, prompt, 450)
-        log.info("morning post: %d events today or tomorrow", len(shown))
-        return with_links(text, [e["link"] for e in shown if e["link"]][:6])
-
-    async def week_post(self, events: list[dict], start: dt.datetime) -> str:
-        """The coming week as a list by source, under a few words from the
-        mayor on what stands out, with the links of the events he names.
-        Empty when the week has nothing."""
-        week = programme(events, start, dt.timedelta(days=WEEK_DAYS), lambda source: None)
-        shown = [e for _, picked in week for e in picked]
-        if not shown:
-            return ""
-        listing = blocks_text(week, detail=0)
-        prompt = (
-            f"Hoje é {fmt_date(start.date())} e esta é a tua mensagem de domingo na sala, sobre a "
-            f"semana que vem. Esta é a agenda da semana, que vai ser publicada por baixo das tuas "
-            f"palavras:\n{listing}\n\n"
-            "Dá os bons-dias e apresenta a semana em poucas palavras: destaca três ou quatro "
-            "eventos, primeiro no teu concelho e depois nos vizinhos, cada um com o nome, o dia, "
-            "a sala ou o local e a terra. Não repitas a lista nem contes os eventos, que ela vai "
-            "por baixo. Usa só os dados acima: não acrescentes horas, locais, preços ou pormenores "
-            "que não constem. Podes dizer que lá estarás em representação do executivo. Até 100 palavras."
-        )
-        text = await asyncio.to_thread(llm, prompt, 300)
-        log.info("week post: %d events", len(shown))
-        return with_links(f"{text}\n\n{listing}", event_links(text, shown, start, limit=6))
 
     async def scheduler(self) -> None:
         while True:
