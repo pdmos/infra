@@ -6,7 +6,6 @@ Two jobs:
     coming week: name, place, day and time of each event, the name linking
     to its page; IPMA's weather for the mayor's municipality and the
     district's weather warnings go on top;
-  * post the district's new weather warnings as IPMA issues them, by day;
   * reply, in character, when someone mentions him, replies to one of his
     messages, or keeps asking him things right after he answered them. The
     reply prompt carries the upcoming agenda of the whole region and the last
@@ -114,14 +113,11 @@ MORNING_OTHER = 3
 WEEKLY_POST_DAY = 6  # Sunday
 WEEK_DAYS = 8
 
-# Weather from IPMA (JAYVALA_WEATHER, see jayvala.nix; none when unset): how
-# long a reply may reuse it, how often the warnings are checked, and the hour
-# from which new ones wait for the next morning post. Only yellow, orange and
-# red warnings are given.
+# Weather from IPMA (JAYVALA_WEATHER, see jayvala.nix; none when unset) and
+# how long a reply may reuse it. Only yellow, orange and red warnings are
+# given, in the morning post and in replies.
 WEATHER = json.loads(os.environ.get("JAYVALA_WEATHER", "{}"))
 WEATHER_MAX_AGE = 30 * 60
-WARNING_CHECK = 30 * 60
-WARNING_QUIET_HOUR = 23
 WARNING_LEVELS = {"yellow": "amarelo", "orange": "laranja", "red": "vermelho"}
 WIND = {"N": "norte", "NE": "nordeste", "E": "leste", "SE": "sudeste", "S": "sul", "SW": "sudoeste", "W": "oeste", "NW": "noroeste"}
 
@@ -749,12 +745,6 @@ def hour_weather(x: dict) -> str:
     return ", ".join(bits)
 
 
-def warning_key(w: dict) -> str:
-    """A warning is new when its kind, level or end is: IPMA reissues the
-    ones in force with a new start."""
-    return f"{w['kind']}|{w['level']}|{w['end'].isoformat()}"
-
-
 def warning_span(start: dt.datetime, end: dt.datetime, now: dt.datetime) -> str:
     """When a warning applies, in words: "hoje das 12h às 18h", "em vigor até
     às 12h", "hoje das 21h à meia-noite", "hoje das 22h até amanhã às 01h"."""
@@ -894,9 +884,7 @@ class Jay:
                 store_sync_tokens=True, encryption_enabled=True
             ),
         )
-        saved = load_json(STATE_FILE, {})
-        # warned: the weather warnings given, key (warning_key) -> when they end.
-        self.state = {"last_post_day": saved.get("last_post_day", ""), "warned": saved.get("warned", {})}
+        self.state = {"last_post_day": load_json(STATE_FILE, {}).get("last_post_day", "")}
         self.weather_cache: tuple[float, dict] | None = None
         self.reply_times: collections.deque[float] = collections.deque()
         self.started_at = time.time()
@@ -1105,8 +1093,6 @@ class Jay:
             log.info("morning post: %d events, %s", shown, "with the weather" if weather else "no weather")
         else:
             log.info("nothing to announce this morning")
-        if weather:
-            self.mark_warned(weather["warnings"], now)
         self.state["last_post_day"] = today.isoformat()
         save_json(STATE_FILE, self.state)
 
@@ -1122,41 +1108,6 @@ class Jay:
             if data := await asyncio.to_thread(load_weather):
                 self.weather_cache = (time.time(), data)
         return self.weather_cache[1] if self.weather_cache else None
-
-    def mark_warned(self, warnings: list[dict], now: dt.datetime) -> None:
-        """Remember the warnings given, until they end."""
-        kept = {key: end for key, end in self.state["warned"].items() if dt.datetime.fromisoformat(end) > now}
-        self.state["warned"] = kept | {warning_key(w): w["end"].isoformat() for w in warnings}
-
-    def warnings_open(self, now: dt.datetime) -> bool:
-        """Warnings go out on their own from the morning post, which carries
-        the night's, until WARNING_QUIET_HOUR."""
-        return now.hour < WARNING_QUIET_HOUR and self.state["last_post_day"] == now.date().isoformat()
-
-    async def post_new_warnings(self) -> None:
-        """Post the district's warnings not given yet, in one message."""
-        now = dt.datetime.now(TZ)
-        weather = await self.weather(max_age=0)
-        new = [w for w in (weather or {}).get("warnings", []) if w["end"] > now and warning_key(w) not in self.state["warned"]]
-        if not new:
-            return
-        header = "⚠️ Novo aviso do IPMA:" if len(new) == 1 else "⚠️ Novos avisos do IPMA:"
-        lines = [warning_line(w, now) for w in new]
-        text = "\n".join([header] + [f"• {line}" for line in lines])
-        items = "".join(f"<li>{emphasis(line)}</li>" for line in lines)
-        await self.send(self.room_id, text, f"<p>{html.escape(header)}</p><ul>{items}</ul>")
-        self.mark_warned(new, now)
-        save_json(STATE_FILE, self.state)
-        log.info("posted %d new weather warning(s)", len(new))
-
-    async def watch_warnings(self) -> None:
-        while True:
-            if self.warnings_open(dt.datetime.now(TZ)):
-                try:
-                    await self.post_new_warnings()
-                except Exception:
-                    log.exception("weather warnings check failed")
-            await asyncio.sleep(WARNING_CHECK)
 
     async def scheduler(self) -> None:
         while True:
@@ -1185,8 +1136,6 @@ class Jay:
             await self.client.keys_upload()
         asyncio.create_task(self.events(SOURCES))  # warm the cache for the first reply
         asyncio.create_task(self.scheduler())
-        if WEATHER:
-            asyncio.create_task(self.watch_warnings())
         try:
             await self.client.sync_forever(timeout=30000, full_state=True)
         finally:
