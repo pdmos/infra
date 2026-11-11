@@ -41,6 +41,18 @@ let
       url = "https://leiriagenda.cm-leiria.pt/pt/agenda";
     }
   ];
+
+  # Weather from IPMA: the forecast of the mayor's municipality (IPMA's own
+  # id for it, as on ipma.pt; the documented open data stops at district
+  # capitals) and the yellow, orange and red warnings of its district.
+  weather = {
+    place = "Porto de Mós";
+    forecast = "https://api.ipma.pt/public-data/forecast/aggregate/1101600.json";
+    types = "https://api.ipma.pt/open-data/weather-type-classe.json";
+    warnings = "https://api.ipma.pt/open-data/forecast/warnings/warnings_www.json";
+    area = "LRA";
+    areaName = "distrito de Leiria";
+  };
 in
 {
   age.secrets.jayvala-matrix-password.file = ../../../secrets/jayvala-matrix-password.age;
@@ -61,6 +73,7 @@ in
       # Room where the daily post goes. The bot must be invited there first.
       JAYVALA_ROOM = "#gabinete-do-presidente:pdmos.pt";
       JAYVALA_SOURCES = builtins.toJSON sources;
+      JAYVALA_WEATHER = builtins.toJSON weather;
       JAYVALA_RESTAURANTS = "${./jayvala/restaurantes.json}";
       # Any OpenAI-compatible chat endpoint. For Amália on the tailnet, e.g.
       # "http://<host>.pdmos.ts:11434/v1/chat/completions" with the Ollama model

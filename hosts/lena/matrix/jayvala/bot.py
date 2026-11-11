@@ -4,12 +4,15 @@ Two jobs:
   * every morning there is something to announce, post the list of what is
     on today and tomorrow across the region, and on Sundays of the whole
     coming week: name, place, day and time of each event, the name linking
-    to its page;
+    to its page; IPMA's weather for the mayor's municipality and the
+    district's weather warnings go on top;
+  * post the district's new weather warnings as IPMA issues them, by day;
   * reply, in character, when someone mentions him, replies to one of his
     messages, or keeps asking him things right after he answered them. The
     reply prompt carries the upcoming agenda of the whole region and the last
     messages of the room, so answers stay factual and he does not repeat
     himself; the links of the events he names go at the end of the reply.
+    Asked about the weather, he also gets IPMA's forecast and warnings.
 
 Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
 the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), the sessions
@@ -67,6 +70,7 @@ LLM_MODEL = os.environ["JAYVALA_LLM_MODEL"]
 POST_HOUR = int(os.environ.get("JAYVALA_POST_HOUR", "8"))
 REPLIES_PER_HOUR = int(os.environ.get("JAYVALA_REPLIES_PER_HOUR", "10"))
 TZ = zoneinfo.ZoneInfo(os.environ.get("JAYVALA_TZ", "Europe/Lisbon"))
+UTC = zoneinfo.ZoneInfo("UTC")
 
 STATE_DIR = Path(os.environ["STATE_DIRECTORY"])
 CRED_DIR = Path(os.environ["CREDENTIALS_DIRECTORY"])
@@ -109,6 +113,24 @@ MORNING_HOME = 5
 MORNING_OTHER = 3
 WEEKLY_POST_DAY = 6  # Sunday
 WEEK_DAYS = 8
+
+# Weather from IPMA (JAYVALA_WEATHER, see jayvala.nix; none when unset): how
+# long a reply may reuse it, how often the warnings are checked, and the hour
+# from which new ones wait for the next morning post. Only yellow, orange and
+# red warnings are given.
+WEATHER = json.loads(os.environ.get("JAYVALA_WEATHER", "{}"))
+WEATHER_MAX_AGE = 30 * 60
+WARNING_CHECK = 30 * 60
+WARNING_QUIET_HOUR = 23
+WARNING_LEVELS = {"yellow": "amarelo", "orange": "laranja", "red": "vermelho"}
+WIND = {"N": "norte", "NE": "nordeste", "E": "leste", "SE": "sudeste", "S": "sul", "SW": "sudoeste", "W": "oeste", "NW": "noroeste"}
+
+# A message about the weather gets the forecast and the warnings in its prompt.
+WEATHER_WORDS = re.compile(
+    r"\b(tempo\b|chuv|chov|aguaceir|sol\b|calor|frio\b|vent|temperatura|graus\b|previs|meteo"
+    r"|avisos?\b|alerta|tempestade|trovoad|nevoeiro|geada|neve\b|granizo|ipma\b)",
+    re.IGNORECASE,
+)
 
 WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 MONTHS = {
@@ -606,12 +628,11 @@ def programme(events: list[dict], start: dt.datetime, days: int, cap) -> list[tu
     return [(s, picked[s["name"]], left[s["name"]]) for s in SOURCES if picked[s["name"]] or s.get("home")]
 
 
-def brief(header: str, groups: list[tuple[dict, list[dict], int]]) -> tuple[str, str]:
-    """The morning post, as plain text and as HTML: under the header, each
-    source with its events, one per line with the name, the place, the day
-    and the time; in the HTML the name links to the event's page."""
-    footer = "Para saber mais de algum evento, responde a esta mensagem."
-    text, markup = [header], [f"<p>{html.escape(header)}</p>"]
+def agenda_blocks(groups: list[tuple[dict, list[dict], int]]) -> list[tuple[str, list[tuple[str, str]]]]:
+    """The agenda of the morning post by source, as (text, HTML) lines: one
+    per event with the name, the place, the day and the time, the name
+    linking to the event's page in the HTML; then how many were left out."""
+    blocks = []
     for source, picked, left in groups:
         lines = []
         for e in picked:
@@ -623,13 +644,179 @@ def brief(header: str, groups: list[tuple[dict, list[dict], int]]) -> tuple[str,
             lines.append((f"{e['title']} — {rest}", f"{name} — {html.escape(rest)}"))
         if left:
             lines.append((f"e mais {left}", f"e mais {left}"))
-        lines = lines or [("nada na agenda", "nada na agenda")]
-        text += ["", source["name"]] + [f"• {t}" for t, _ in lines]
+        blocks.append((source["name"], lines or [("nada na agenda", "nada na agenda")]))
+    return blocks
+
+
+def brief(header: str, blocks: list[tuple[str, list[tuple[str, str]]]]) -> tuple[str, str]:
+    """The morning post, as plain text and as HTML: the header, then each
+    block's title and its lines as a list."""
+    footer = "Para saber mais de algum evento ou do tempo, responde a esta mensagem."
+    text, markup = [header], [f"<p>{html.escape(header)}</p>"]
+    for title, lines in blocks:
+        text += ["", title] + [f"• {t}" for t, _ in lines]
         items = "".join(f"<li>{h}</li>" for _, h in lines)
-        markup.append(f"<p><b>{html.escape(source['name'])}</b></p><ul>{items}</ul>")
+        markup.append(f"<p><b>{html.escape(title)}</b></p><ul>{items}</ul>")
     text += ["", footer]
     markup.append(f"<p>{footer}</p>")
     return "\n".join(text), "".join(markup)
+
+
+# ------------------------------------------------------------- weather --
+
+
+def ipma(url: str, name: str):
+    """IPMA's JSON at url; fetch() keeps the last copy for when IPMA fails."""
+    CACHE_DIR.mkdir(exist_ok=True)
+    body = fetch(url, CACHE_DIR / f"ipma-{name}.json")
+    try:
+        return json.loads(body) if body else None
+    except ValueError:
+        log.warning("%s: not JSON", url)
+        return None
+
+
+def ipma_number(value) -> float | None:
+    """IPMA's numbers come as text, with -99 for no value."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if number <= -99 else number
+
+
+def load_weather() -> dict | None:
+    """IPMA's forecast for the home municipality, by day and by hour, and the
+    yellow, orange and red warnings of its district that have not ended. IPMA
+    gives its times in UTC. None when there is no forecast."""
+    forecast, types = ipma(WEATHER["forecast"], "forecast"), ipma(WEATHER["types"], "types")
+    if not forecast:
+        return None
+    sky = {t["idWeatherType"]: t["descWeatherTypePT"] for t in (types or {}).get("data", [])}
+    now = dt.datetime.now(TZ)
+    days, hours = {}, []
+    for x in forecast:
+        common = {
+            "sky": sky.get(x.get("idTipoTempo"), ""),
+            "rain": ipma_number(x.get("probabilidadePrecipita")),
+            "wind": WIND.get(x.get("ddVento"), ""),
+        }
+        if x.get("idPeriodo") == 24:
+            day = dt.date.fromisoformat(x["dataPrev"][:10])
+            if day >= now.date():
+                days[day] = common | {"tmin": ipma_number(x.get("tMin")), "tmax": ipma_number(x.get("tMax"))}
+        else:
+            when = dt.datetime.fromisoformat(x["dataPrev"]).replace(tzinfo=UTC).astimezone(TZ)
+            hours.append(common | {"when": when, "temp": ipma_number(x.get("tMed")), "speed": ipma_number(x.get("ffVento"))})
+    warnings = []
+    for w in ipma(WEATHER["warnings"], "warnings") or []:
+        if w.get("idAreaAviso") != WEATHER["area"] or w.get("awarenessLevelID") not in WARNING_LEVELS:
+            continue
+        start, end = (dt.datetime.fromisoformat(w[k]).replace(tzinfo=UTC).astimezone(TZ) for k in ("startTime", "endTime"))
+        if end > now:
+            warnings.append(
+                {
+                    "level": w["awarenessLevelID"],
+                    "kind": w["awarenessTypeName"],
+                    "start": start,
+                    "end": end,
+                    "text": (w.get("text") or "").strip(),
+                }
+            )
+    warnings.sort(key=lambda w: (w["start"], w["kind"]))
+    return {"days": days, "hours": sorted(hours, key=lambda h: h["when"]), "warnings": warnings}
+
+
+def day_weather(x: dict) -> str:
+    bits = [x["sky"].lower()] if x["sky"] else []
+    if x["tmin"] is not None and x["tmax"] is not None:
+        bits.append(f"{round(x['tmin'])}° a {round(x['tmax'])}°")
+    if x["wind"]:
+        bits.append(f"vento de {x['wind']}")
+    if x["rain"] is not None:
+        bits.append(f"{round(x['rain'])}% de probabilidade de chuva")
+    return ", ".join(bits)
+
+
+def hour_weather(x: dict) -> str:
+    bits = [x["sky"].lower()] if x["sky"] else []
+    if x["temp"] is not None:
+        bits.append(f"{round(x['temp'])}°")
+    if x["rain"] is not None:
+        bits.append(f"{round(x['rain'])}% de probabilidade de chuva")
+    if x["speed"] is not None:
+        bits.append("vento" + (f" de {x['wind']}" if x["wind"] else "") + f" a {round(x['speed'])} km/h")
+    return ", ".join(bits)
+
+
+def warning_key(w: dict) -> str:
+    """A warning is new when its kind, level or end is: IPMA reissues the
+    ones in force with a new start."""
+    return f"{w['kind']}|{w['level']}|{w['end'].isoformat()}"
+
+
+def warning_span(start: dt.datetime, end: dt.datetime, now: dt.datetime) -> str:
+    """When a warning applies, in words: "hoje das 12h às 18h", "em vigor até
+    às 12h", "hoje das 21h à meia-noite", "hoje das 22h até amanhã às 01h"."""
+
+    def day(d: dt.date) -> str:
+        if d == now.date():
+            return "hoje"
+        if d == now.date() + dt.timedelta(days=1):
+            return "amanhã"
+        return f"{WEEKDAYS[d.weekday()]} {d:%d/%m}"
+
+    def clock(t: dt.datetime) -> str:
+        return f"{t:%H}h" if t.minute == 0 else f"{t:%H}h{t:%M}"
+
+    end_day, until = end.date(), f"às {clock(end)}"
+    if (end.hour, end.minute) == (0, 0):
+        end_day, until = end_day - dt.timedelta(days=1), "à meia-noite"
+    if start <= now:
+        return f"em vigor até {until}" + ("" if end_day == now.date() else f" de {day(end_day)}")
+    if end_day == start.date():
+        return f"{day(start.date())} das {clock(start)} {until}"
+    return f"{day(start.date())} das {clock(start)} até {day(end_day)} {until}"
+
+
+def warning_line(w: dict, now: dt.datetime) -> str:
+    line = f"Aviso {WARNING_LEVELS[w['level']]} de {w['kind'].lower()} no {WEATHER['areaName']}, "
+    line += warning_span(w["start"], w["end"], now)
+    return f"{line}: {w['text']}" if w["text"] else line
+
+
+def emphasis(line: str) -> str:
+    """The line as HTML, with a warning's level in bold."""
+    markup = html.escape(line)
+    for level in WARNING_LEVELS.values():
+        markup = markup.replace(f"Aviso {level} ", f"<b>Aviso {level}</b> ", 1)
+    return markup
+
+
+def weather_block(weather: dict, now: dt.datetime) -> tuple[str, list[tuple[str, str]]]:
+    """The weather of the morning post: today and tomorrow at home and the
+    district's warnings, under a title that names IPMA as the source."""
+    lines = []
+    for label, day in (("Hoje", now.date()), ("Amanhã", now.date() + dt.timedelta(days=1))):
+        if x := weather["days"].get(day):
+            lines.append(f"{label}: {day_weather(x)}")
+    lines += [warning_line(w, now) for w in weather["warnings"] if w["end"] > now]
+    return f"Tempo em {WEATHER['place']} (IPMA)", [(line, emphasis(line)) for line in lines]
+
+
+def weather_text(weather: dict, now: dt.datetime) -> str:
+    """The forecast and the warnings as handed to the model for a reply."""
+    lines = [f"Previsão do IPMA para {WEATHER['place']}, por dia:"]
+    lines += [f"- {fmt_date(day)}: {day_weather(x)}" for day, x in sorted(weather["days"].items())]
+    until = dt.datetime.combine(now.date() + dt.timedelta(days=2), dt.time(0, 0), TZ)
+    hours = [h for h in weather["hours"] if now - dt.timedelta(hours=1) <= h["when"] < until and h["when"].hour % 3 == 0]
+    if hours:
+        lines.append("De três em três horas, até ao fim de amanhã:")
+        lines += [f"- {WEEKDAYS[h['when'].weekday()]} às {h['when']:%H}h: {hour_weather(h)}" for h in hours]
+    lines.append(f"Avisos meteorológicos do IPMA para o {WEATHER['areaName']}:")
+    warnings = [f"- {warning_line(w, now)}" for w in weather["warnings"] if w["end"] > now]
+    lines += warnings or ["- nenhum aviso amarelo, laranja ou vermelho"]
+    return "\n".join(lines)
 
 
 def agenda_text(events: list[dict], now: dt.datetime) -> str:
@@ -707,7 +894,10 @@ class Jay:
                 store_sync_tokens=True, encryption_enabled=True
             ),
         )
-        self.state = {"last_post_day": load_json(STATE_FILE, {}).get("last_post_day", "")}
+        saved = load_json(STATE_FILE, {})
+        # warned: the weather warnings given, key (warning_key) -> when they end.
+        self.state = {"last_post_day": saved.get("last_post_day", ""), "warned": saved.get("warned", {})}
+        self.weather_cache: tuple[float, dict] | None = None
         self.reply_times: collections.deque[float] = collections.deque()
         self.started_at = time.time()
         self.room_id = ROOM
@@ -817,12 +1007,20 @@ class Jay:
                 "o tipo e a nota, mais nada. Puxa pelo teu concelho, sem esconder a "
                 "Batalha.\n\n"
             )
+        weather = ""
+        if WEATHER_WORDS.search(body) and (forecast := await self.weather()):
+            weather = (
+                f"{weather_text(forecast, now)}\n\n"
+                "Se perguntarem pelo tempo, usa só esta previsão e estes avisos, diz que são do "
+                "IPMA e não inventes valores, horas nem avisos.\n\n"
+            )
         prompt = (
             f"Hoje é {fmt_date(now.date())}. Agenda dos próximos {AGENDA_DAYS} dias, "
             "por concelho, órgão ou sala, segundo os sites oficiais (Câmaras de Porto de Mós, "
             "Batalha e Leiria, Assembleia Municipal de Porto de Mós e Teatro José Lúcio da "
             f"Silva):\n{agenda}\n\n"
             f"{food}"
+            f"{weather}"
             "Últimas mensagens da sala, da mais antiga para a mais recente:\n"
             f"{earlier or '(nenhuma)'}\n\n"
             f"Agora {name} escreveu, dirigindo-se a ti:\n«{body}»\n\n"
@@ -881,10 +1079,11 @@ class Jay:
 
     async def daily_post(self) -> None:
         """Every morning there is something to announce, post the list: today
-        and tomorrow across the region, or on Sundays the whole coming week.
-        Raises when the home feeds give nothing, so the scheduler retries
-        instead of skipping the day."""
-        today = dt.datetime.now(TZ).date()
+        and tomorrow across the region, or on Sundays the whole coming week,
+        under the weather when IPMA answers. Raises when the home feeds give
+        nothing, so the scheduler retries instead of skipping the day."""
+        now = dt.datetime.now(TZ)
+        today = now.date()
         if self.state["last_post_day"] == today.isoformat():
             return
         events = sorted(await self.events(SOURCES, max_age=0), key=lambda e: e["when"])
@@ -898,13 +1097,66 @@ class Jay:
         else:
             header = "Bom dia! A agenda de hoje e de amanhã:"
             groups = programme(events, start, 2, lambda source: MORNING_HOME if source.get("home") else MORNING_OTHER)
-        if shown := sum(len(picked) for _, picked, _ in groups):
-            await self.send(self.room_id, *brief(header, groups))
-            log.info("morning post: %d events", shown)
+        weather = await self.weather(max_age=0)
+        shown = sum(len(picked) for _, picked, _ in groups)
+        if shown or weather:
+            blocks = ([weather_block(weather, now)] if weather else []) + agenda_blocks(groups)
+            await self.send(self.room_id, *brief(header, blocks))
+            log.info("morning post: %d events, %s", shown, "with the weather" if weather else "no weather")
         else:
             log.info("nothing to announce this morning")
+        if weather:
+            self.mark_warned(weather["warnings"], now)
         self.state["last_post_day"] = today.isoformat()
         save_json(STATE_FILE, self.state)
+
+    # -- weather ----------------------------------------------------------
+
+    async def weather(self, max_age: float = WEATHER_MAX_AGE) -> dict | None:
+        """IPMA's forecast and warnings (see load_weather), kept max_age
+        seconds; the last good answer when IPMA fails; None without weather
+        configured or any answer yet."""
+        if not WEATHER:
+            return None
+        if not (self.weather_cache and time.time() - self.weather_cache[0] < max_age):
+            if data := await asyncio.to_thread(load_weather):
+                self.weather_cache = (time.time(), data)
+        return self.weather_cache[1] if self.weather_cache else None
+
+    def mark_warned(self, warnings: list[dict], now: dt.datetime) -> None:
+        """Remember the warnings given, until they end."""
+        kept = {key: end for key, end in self.state["warned"].items() if dt.datetime.fromisoformat(end) > now}
+        self.state["warned"] = kept | {warning_key(w): w["end"].isoformat() for w in warnings}
+
+    def warnings_open(self, now: dt.datetime) -> bool:
+        """Warnings go out on their own from the morning post, which carries
+        the night's, until WARNING_QUIET_HOUR."""
+        return now.hour < WARNING_QUIET_HOUR and self.state["last_post_day"] == now.date().isoformat()
+
+    async def post_new_warnings(self) -> None:
+        """Post the district's warnings not given yet, in one message."""
+        now = dt.datetime.now(TZ)
+        weather = await self.weather(max_age=0)
+        new = [w for w in (weather or {}).get("warnings", []) if w["end"] > now and warning_key(w) not in self.state["warned"]]
+        if not new:
+            return
+        header = "⚠️ Novo aviso do IPMA:" if len(new) == 1 else "⚠️ Novos avisos do IPMA:"
+        lines = [warning_line(w, now) for w in new]
+        text = "\n".join([header] + [f"• {line}" for line in lines])
+        items = "".join(f"<li>{emphasis(line)}</li>" for line in lines)
+        await self.send(self.room_id, text, f"<p>{html.escape(header)}</p><ul>{items}</ul>")
+        self.mark_warned(new, now)
+        save_json(STATE_FILE, self.state)
+        log.info("posted %d new weather warning(s)", len(new))
+
+    async def watch_warnings(self) -> None:
+        while True:
+            if self.warnings_open(dt.datetime.now(TZ)):
+                try:
+                    await self.post_new_warnings()
+                except Exception:
+                    log.exception("weather warnings check failed")
+            await asyncio.sleep(WARNING_CHECK)
 
     async def scheduler(self) -> None:
         while True:
@@ -933,6 +1185,8 @@ class Jay:
             await self.client.keys_upload()
         asyncio.create_task(self.events(SOURCES))  # warm the cache for the first reply
         asyncio.create_task(self.scheduler())
+        if WEATHER:
+            asyncio.create_task(self.watch_warnings())
         try:
             await self.client.sync_forever(timeout=30000, full_state=True)
         finally:
