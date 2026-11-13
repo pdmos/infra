@@ -1,0 +1,10 @@
+baseURL = "https://pdmos.pt/"
+languageCode = "pt-PT"
+title = "pdmos.pt"
+timeZone = "Europe/Lisbon"
+disableKinds = ["taxonomy", "term", "rss", "sitemap"]
+disableHugoGeneratorInject = true
+
+# The agenda is fetched on every build; the daily timer relies on it
+[caches.getresource]
+maxAge = 0
