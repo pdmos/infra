@@ -1,0 +1,842 @@
+{
+ "fonte": "Google Places, 30/10/2026",
+ "restaurantes": [
+  {
+   "nome": "A Gralha",
+   "concelho": "Porto de Mós",
+   "localidade": "Alvados",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 1566,
+   "preco": 3
+  },
+  {
+   "nome": "Adega do Luís",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "churrasqueira",
+   "nota": 4.4,
+   "avaliacoes": 393,
+   "preco": 3
+  },
+  {
+   "nome": "Bistrô Campanas",
+   "concelho": "Porto de Mós",
+   "localidade": "Alcaria",
+   "categoria": "restaurante",
+   "nota": 4.8,
+   "avaliacoes": 243,
+   "preco": 2
+  },
+  {
+   "nome": "Cafe Miguel",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 55,
+   "preco": 2
+  },
+  {
+   "nome": "Cafe/Restaurante Renascer",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "restaurante",
+   "nota": 3.8,
+   "avaliacoes": 32,
+   "preco": 2
+  },
+  {
+   "nome": "Caffe Olimpio",
+   "concelho": "Porto de Mós",
+   "localidade": "Calvaria de Cima",
+   "categoria": "café/pastelaria",
+   "nota": 4.4,
+   "avaliacoes": 194,
+   "preco": 1
+  },
+  {
+   "nome": "Café Belíssimo",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "café/pastelaria",
+   "nota": 3.7,
+   "avaliacoes": 3,
+   "preco": null
+  },
+  {
+   "nome": "Café Central",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "café/pastelaria",
+   "nota": 4.5,
+   "avaliacoes": 110,
+   "preco": 1
+  },
+  {
+   "nome": "Café Central Do Juncal",
+   "concelho": "Porto de Mós",
+   "localidade": "Juncal",
+   "categoria": "café/pastelaria",
+   "nota": 4.2,
+   "avaliacoes": 130,
+   "preco": 2
+  },
+  {
+   "nome": "Café Pedro",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "café/pastelaria",
+   "nota": 4.5,
+   "avaliacoes": 60,
+   "preco": 1
+  },
+  {
+   "nome": "Café Principal - De: José Bernardo Santos da Silva Fino",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 84,
+   "preco": 2
+  },
+  {
+   "nome": "Canto da Saudade",
+   "concelho": "Porto de Mós",
+   "localidade": "São João Baptista",
+   "categoria": "restaurante",
+   "nota": 4.1,
+   "avaliacoes": 178,
+   "preco": 2
+  },
+  {
+   "nome": "CCRD Arrimal",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "bar/tasca",
+   "nota": 4.8,
+   "avaliacoes": 32,
+   "preco": 2
+  },
+  {
+   "nome": "Churrasqueira Ze Dos Frangos",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "restaurante",
+   "nota": 4.2,
+   "avaliacoes": 1055,
+   "preco": 2
+  },
+  {
+   "nome": "Doce Mira",
+   "concelho": "Porto de Mós",
+   "localidade": "Mira de Aire",
+   "categoria": "café/pastelaria",
+   "nota": 4.6,
+   "avaliacoes": 158,
+   "preco": null
+  },
+  {
+   "nome": "Dom Abade",
+   "concelho": "Porto de Mós",
+   "localidade": "Santeira",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 2111,
+   "preco": 3
+  },
+  {
+   "nome": "Esplanada Jardim",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.3,
+   "avaliacoes": 423,
+   "preco": 2
+  },
+  {
+   "nome": "Ferra o Bico",
+   "concelho": "Porto de Mós",
+   "localidade": "Chão da Feira",
+   "categoria": "restaurante",
+   "nota": 4.3,
+   "avaliacoes": 206,
+   "preco": 2
+  },
+  {
+   "nome": "Flor da Serra",
+   "concelho": "Porto de Mós",
+   "localidade": "Alvados",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 375,
+   "preco": null
+  },
+  {
+   "nome": "Horacius Bar",
+   "concelho": "Porto de Mós",
+   "localidade": "Mira de Aire",
+   "categoria": "restaurante",
+   "nota": 3.2,
+   "avaliacoes": 101,
+   "preco": 2
+  },
+  {
+   "nome": "Jardim",
+   "concelho": "Porto de Mós",
+   "localidade": "Mira de Aire",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 862,
+   "preco": 3
+  },
+  {
+   "nome": "Kauz Churrasco e Burguer",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "restaurante",
+   "nota": 4.9,
+   "avaliacoes": 127,
+   "preco": 3
+  },
+  {
+   "nome": "Lareira Texas",
+   "concelho": "Porto de Mós",
+   "localidade": "Cruz da Légua",
+   "categoria": "restaurante",
+   "nota": 4.3,
+   "avaliacoes": 236,
+   "preco": 2
+  },
+  {
+   "nome": "McDonald's Porto de Mós",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "hamburgueria",
+   "nota": 4.4,
+   "avaliacoes": 1073,
+   "preco": 2
+  },
+  {
+   "nome": "Moz'art kitchen and gallery",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.8,
+   "avaliacoes": 253,
+   "preco": 3
+  },
+  {
+   "nome": "Norpizzas",
+   "concelho": "Porto de Mós",
+   "localidade": "Arrimal",
+   "categoria": "pizzaria",
+   "nota": 4.4,
+   "avaliacoes": 258,
+   "preco": 2
+  },
+  {
+   "nome": "Padaria PAULUS",
+   "concelho": "Porto de Mós",
+   "localidade": "Calvaria de Cima",
+   "categoria": "café/pastelaria",
+   "nota": 4.4,
+   "avaliacoes": 185,
+   "preco": null
+  },
+  {
+   "nome": "Portomosense",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.3,
+   "avaliacoes": 312,
+   "preco": null
+  },
+  {
+   "nome": "Recanto dos Sabores",
+   "concelho": "Porto de Mós",
+   "localidade": "Alqueidão da Serra",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 181,
+   "preco": 3
+  },
+  {
+   "nome": "Recinto Festas São Pedro - Tasquinhas",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 54,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante - O Requinte dos Amigos",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 89,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Boteco do D'",
+   "concelho": "Porto de Mós",
+   "localidade": "São João Baptista",
+   "categoria": "restaurante",
+   "nota": 4.7,
+   "avaliacoes": 399,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Café Sol Serra",
+   "concelho": "Porto de Mós",
+   "localidade": "Pedreiras",
+   "categoria": "restaurante",
+   "nota": 4.1,
+   "avaliacoes": 279,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Cova da Velha",
+   "concelho": "Porto de Mós",
+   "localidade": "Alcaria",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 1195,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Gigas",
+   "concelho": "Porto de Mós",
+   "localidade": "Marinha",
+   "categoria": "restaurante",
+   "nota": 4.2,
+   "avaliacoes": 157,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Manas Santa",
+   "concelho": "Porto de Mós",
+   "localidade": "",
+   "categoria": "restaurante",
+   "nota": 4.1,
+   "avaliacoes": 337,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Pires & Prato Grill",
+   "concelho": "Porto de Mós",
+   "localidade": "Pedreiras",
+   "categoria": "restaurante",
+   "nota": 4.3,
+   "avaliacoes": 881,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante SOLO 24.80",
+   "concelho": "Porto de Mós",
+   "localidade": "São Pedro",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 25,
+   "preco": 3
+  },
+  {
+   "nome": "Sabores da Carvalha",
+   "concelho": "Porto de Mós",
+   "localidade": "Mira de Aire",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 175,
+   "preco": 2
+  },
+  {
+   "nome": "Sabores da Vila",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 46,
+   "preco": 3
+  },
+  {
+   "nome": "Sabores Únicos - Grutas de Mira de Aire",
+   "concelho": "Porto de Mós",
+   "localidade": "Mira de Aire",
+   "categoria": "restaurante",
+   "nota": 3.4,
+   "avaliacoes": 320,
+   "preco": 3
+  },
+  {
+   "nome": "Snack Bar The Gallop Lda",
+   "concelho": "Porto de Mós",
+   "localidade": "Calvaria de Cima",
+   "categoria": "restaurante",
+   "nota": 4.3,
+   "avaliacoes": 188,
+   "preco": 2
+  },
+  {
+   "nome": "SnackBar Pastelaria Almoinhas",
+   "concelho": "Porto de Mós",
+   "localidade": "Calvaria de Cima",
+   "categoria": "café/pastelaria",
+   "nota": 4.5,
+   "avaliacoes": 30,
+   "preco": 2
+  },
+  {
+   "nome": "Sr. Machado - Churrascaria e Pizzaria",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "pizzaria",
+   "nota": 4.4,
+   "avaliacoes": 392,
+   "preco": 3
+  },
+  {
+   "nome": "Sweet Vintage Pastelaria Gelataria",
+   "concelho": "Porto de Mós",
+   "localidade": "Mira de Aire",
+   "categoria": "café/pastelaria",
+   "nota": 4.8,
+   "avaliacoes": 403,
+   "preco": null
+  },
+  {
+   "nome": "Taberna d'avó",
+   "concelho": "Porto de Mós",
+   "localidade": "Ribeira de Cima",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 54,
+   "preco": 2
+  },
+  {
+   "nome": "Taberna da Fornea",
+   "concelho": "Porto de Mós",
+   "localidade": "Alcaria",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 315,
+   "preco": 3
+  },
+  {
+   "nome": "Taberna da Vila",
+   "concelho": "Porto de Mós",
+   "localidade": "Porto de Mós",
+   "categoria": "restaurante",
+   "nota": 4.3,
+   "avaliacoes": 305,
+   "preco": 2
+  },
+  {
+   "nome": "Taberna do Moleiro",
+   "concelho": "Porto de Mós",
+   "localidade": "Alvados",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 388,
+   "preco": 3
+  },
+  {
+   "nome": "Tasca do Barbas",
+   "concelho": "Porto de Mós",
+   "localidade": "Calvaria de Cima",
+   "categoria": "bar/tasca",
+   "nota": 4.7,
+   "avaliacoes": 56,
+   "preco": 2
+  },
+  {
+   "nome": "Terruja",
+   "concelho": "Porto de Mós",
+   "localidade": "Mira de Aire",
+   "categoria": "restaurante",
+   "nota": 4.8,
+   "avaliacoes": 146,
+   "preco": 4
+  },
+  {
+   "nome": "Ti Alzira",
+   "concelho": "Porto de Mós",
+   "localidade": "Arrimal",
+   "categoria": "restaurante",
+   "nota": 5.0,
+   "avaliacoes": 13,
+   "preco": null
+  },
+  {
+   "nome": "ACALIV",
+   "concelho": "Batalha",
+   "localidade": "Reguengo do Fetal",
+   "categoria": "restaurante",
+   "nota": 5.0,
+   "avaliacoes": 13,
+   "preco": 2
+  },
+  {
+   "nome": "Anonimosbar",
+   "concelho": "Batalha",
+   "localidade": "Vale de Barreiras",
+   "categoria": "restaurante",
+   "nota": 4.7,
+   "avaliacoes": 554,
+   "preco": 2
+  },
+  {
+   "nome": "Auto Snack",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 232,
+   "preco": 2
+  },
+  {
+   "nome": "Batalha Dos Sabores",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "café/pastelaria",
+   "nota": 4.3,
+   "avaliacoes": 246,
+   "preco": 1
+  },
+  {
+   "nome": "Brasuka Batalha",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "pizzaria",
+   "nota": 4.5,
+   "avaliacoes": 15,
+   "preco": 3
+  },
+  {
+   "nome": "Bulltique",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 21,
+   "preco": null
+  },
+  {
+   "nome": "Cafe Lagoa",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "café/pastelaria",
+   "nota": 4.6,
+   "avaliacoes": 56,
+   "preco": 1
+  },
+  {
+   "nome": "Café Cervejaria Esquina",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "café/pastelaria",
+   "nota": 4.6,
+   "avaliacoes": 82,
+   "preco": 1
+  },
+  {
+   "nome": "Café Rino",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 109,
+   "preco": null
+  },
+  {
+   "nome": "Casa do Benfica in Battle",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "café/pastelaria",
+   "nota": 4.3,
+   "avaliacoes": 615,
+   "preco": 2
+  },
+  {
+   "nome": "Centro Recreativo Da Golpilheira",
+   "concelho": "Batalha",
+   "localidade": "Golpilheira",
+   "categoria": "outro",
+   "nota": 4.4,
+   "avaliacoes": 124,
+   "preco": null
+  },
+  {
+   "nome": "Churrasqueira Churrasco",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "churrasqueira",
+   "nota": 4.2,
+   "avaliacoes": 127,
+   "preco": 2
+  },
+  {
+   "nome": "Churrasqueira O Marques",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "churrasqueira",
+   "nota": 4.2,
+   "avaliacoes": 13,
+   "preco": 2
+  },
+  {
+   "nome": "Frango da Villa",
+   "concelho": "Batalha",
+   "localidade": "Casal da Amieira",
+   "categoria": "restaurante",
+   "nota": 4.2,
+   "avaliacoes": 517,
+   "preco": 3
+  },
+  {
+   "nome": "Marmita do Zé grande",
+   "concelho": "Batalha",
+   "localidade": "São Mamede",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 18,
+   "preco": 3
+  },
+  {
+   "nome": "Minha Pizza Favorita",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 67,
+   "preco": 3
+  },
+  {
+   "nome": "Mosteiro do Leitão (Batalha)",
+   "concelho": "Batalha",
+   "localidade": "Casal da Amieira",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 5555,
+   "preco": 3
+  },
+  {
+   "nome": "O Moinho * Pastelaria * Snack-Bar",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "café/pastelaria",
+   "nota": 4.8,
+   "avaliacoes": 48,
+   "preco": 2
+  },
+  {
+   "nome": "Old Jack",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "pizzaria",
+   "nota": 4.7,
+   "avaliacoes": 358,
+   "preco": 2
+  },
+  {
+   "nome": "Pap'Oliva - Espaço Sabores",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.0,
+   "avaliacoes": 236,
+   "preco": 3
+  },
+  {
+   "nome": "Pizzaria Tentazione",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "pizzaria",
+   "nota": 4.4,
+   "avaliacoes": 770,
+   "preco": 2
+  },
+  {
+   "nome": "Pátio da Jardoeira",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 3.9,
+   "avaliacoes": 324,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Burro Velho",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 2679,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Casa das Febras B&B",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 3.5,
+   "avaliacoes": 214,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Churrasqueria Vitoria",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "churrasqueira",
+   "nota": 4.2,
+   "avaliacoes": 489,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Dom Duarte",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 3.9,
+   "avaliacoes": 475,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Esplanada do Alto do Reguengo",
+   "concelho": "Batalha",
+   "localidade": "Reguengo do Fetal",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 177,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Etnográfico da Golpilheira",
+   "concelho": "Batalha",
+   "localidade": "Golpilheira",
+   "categoria": "restaurante",
+   "nota": 4.2,
+   "avaliacoes": 222,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Koi",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 151,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante O Catarino",
+   "concelho": "Batalha",
+   "localidade": "São Mamede",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 483,
+   "preco": 2
+  },
+  {
+   "nome": "Restaurante Piadussa",
+   "concelho": "Batalha",
+   "localidade": "Pia de Urso",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 945,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Pérola Do Fétal",
+   "concelho": "Batalha",
+   "localidade": "Reguengo do Fetal",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 790,
+   "preco": 3
+  },
+  {
+   "nome": "Restaurante Retiro",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.1,
+   "avaliacoes": 50,
+   "preco": null
+  },
+  {
+   "nome": "Restaurante T-Bone SteakHouse",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.7,
+   "avaliacoes": 2859,
+   "preco": 3
+  },
+  {
+   "nome": "restaurante trintta",
+   "concelho": "Batalha",
+   "localidade": "Jardoeira",
+   "categoria": "restaurante",
+   "nota": 4.7,
+   "avaliacoes": 303,
+   "preco": 4
+  },
+  {
+   "nome": "Restaurante Vintage",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 432,
+   "preco": 3
+  },
+  {
+   "nome": "Taberna Do Mosteiro",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": null,
+   "avaliacoes": 0,
+   "preco": null
+  },
+  {
+   "nome": "Tasca da Tinouca",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.6,
+   "avaliacoes": 463,
+   "preco": 3
+  },
+  {
+   "nome": "Tasca do Fetal",
+   "concelho": "Batalha",
+   "localidade": "Reguengo do Fetal",
+   "categoria": "restaurante",
+   "nota": 4.2,
+   "avaliacoes": 155,
+   "preco": 2
+  },
+  {
+   "nome": "Taverna do Xico",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.5,
+   "avaliacoes": 323,
+   "preco": 3
+  },
+  {
+   "nome": "Treze 85 Restaurante | Bar",
+   "concelho": "Batalha",
+   "localidade": "Batalha",
+   "categoria": "restaurante",
+   "nota": 4.4,
+   "avaliacoes": 62,
+   "preco": 3
+  }
+ ]
+}
