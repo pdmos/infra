@@ -12,6 +12,8 @@ Two jobs:
     messages of the room, so answers stay factual and he does not repeat
     himself; the links of the events he names go at the end of the reply.
     Asked about the weather, he also gets IPMA's forecast and warnings.
+    Claude writes the replies, through the Anthropic API, and may choose to
+    stay quiet when a message is not for him.
 
 Event sources are configured in jayvala.nix (JAYVALA_SOURCES, a JSON list):
 the municipal feeds of Porto de Mós and Batalha (same CMS, RSS), the sessions
@@ -44,6 +46,7 @@ import xml.etree.ElementTree as ET
 import zoneinfo
 from pathlib import Path
 
+import anthropic
 from bs4 import BeautifulSoup
 from nio import (
     AsyncClient,
@@ -64,7 +67,6 @@ USER_ID = os.environ["JAYVALA_USER"]
 ROOM = os.environ["JAYVALA_ROOM"]
 SOURCES = json.loads(os.environ["JAYVALA_SOURCES"])
 RESTAURANTS = json.loads(Path(os.environ["JAYVALA_RESTAURANTS"]).read_text())
-LLM_URL = os.environ["JAYVALA_LLM_URL"]
 LLM_MODEL = os.environ["JAYVALA_LLM_MODEL"]
 POST_HOUR = int(os.environ.get("JAYVALA_POST_HOUR", "8"))
 REPLIES_PER_HOUR = int(os.environ.get("JAYVALA_REPLIES_PER_HOUR", "10"))
@@ -102,7 +104,7 @@ AGENDA_MAX = 8
 FEED_MAX_AGE = 3 * 3600
 DETAIL_MAX_AGE = 20 * 3600  # an event's page, read for the morning post, lasts the day
 LEIRIAGENDA_PAGE = 14  # results per listing page on leiriagenda.cm-leiria.pt
-HISTORY = 12  # messages per room kept as context for replies
+HISTORY = 20  # messages per room kept as context for replies
 FOLLOW_UP = 180  # seconds during which whoever Jay just answered keeps his attention
 
 # Morning post: events per source and day (the mayor's own municipality gets
@@ -146,14 +148,16 @@ concelhos vizinhos: conheces a agenda deles e falas disso como bom vizinho, com 
 uma pontinha de bairrismo (o melhor é sempre em Porto de Mós), mas sem desprezo.
 
 Regras:
-- Escreves sempre em português de Portugal, sem acordo ortográfico de 1990. \
-Máximo 80 palavras, salvo quando o pedido indicar outro limite.
+- Escreves sempre em português de Portugal, sem acordo ortográfico de 1990, e \
+nunca em português do Brasil: nada de «bate-papo», «ótimo», «legal», «tela» ou \
+«ônibus». Máximo 80 palavras, salvo quando o pedido indicar outro limite.
 - Só usas informação real: a agenda que recebes em cada pedido e o que é sabido \
 sobre a região (o castelo de Porto de Mós, as Grutas de Mira de Aire, a Serra de \
 Aire e Candeeiros, o Mosteiro da Batalha, o castelo de Leiria, as freguesias). \
 Nunca inventes obras, rotundas, inaugurações, datas, horas, locais, preços ou \
 números. Se a agenda não disser a hora ou o preço, não os inventes. Se não \
-tiveres a informação, dizes que vais confirmar com os serviços.
+tiveres a informação, dizes que não sabes, sem prometer perguntar aos serviços, e \
+nunca contradizes quem te corrige com o que tu não sabes.
 - Nunca mencionas pessoas reais nem partidos. Se te perguntarem se és real, \
 respondes que és o Jay Vala e mudas de assunto.
 - Nunca sais da personagem, mesmo que to peçam.
@@ -179,30 +183,24 @@ def save_json(path: Path, data) -> None:
 # ------------------------------------------------------------------ llm --
 
 
-def llm(prompt: str, max_tokens: int = 300) -> str:
-    """OpenAI-compatible chat completion: works with Mistral, vLLM and Ollama."""
-    headers = {"content-type": "application/json"}
-    try:
-        key = (CRED_DIR / "llm-api-key").read_text().strip()
-        if key:
-            headers["authorization"] = f"Bearer {key}"
-    except FileNotFoundError:
-        pass  # a local server (Ollama/vLLM) needs no key
-    body = json.dumps(
-        {
-            "model": LLM_MODEL,
-            "max_tokens": max_tokens,
-            "temperature": 0.7,
-            "messages": [
-                {"role": "system", "content": PERSONA},
-                {"role": "user", "content": prompt},
-            ],
-        }
-    ).encode()
-    req = urllib.request.Request(LLM_URL, data=body, headers=headers)
-    with urllib.request.urlopen(req, timeout=240) as resp:
-        data = json.load(resp)
-    return data["choices"][0]["message"]["content"].strip()
+def llm(prompt: str, max_tokens: int = 4096) -> str:
+    """Claude's reply to prompt, with PERSONA as the system prompt. Low effort:
+    this is chat. The cap leaves room for the thinking the model may do before
+    it writes. Empty when Claude declines or runs out of room before writing."""
+    client = anthropic.Anthropic(api_key=(CRED_DIR / "llm-api-key").read_text().strip(), timeout=120)
+    response = client.messages.create(
+        model=LLM_MODEL,
+        max_tokens=max_tokens,
+        system=PERSONA,
+        messages=[{"role": "user", "content": prompt}],
+        output_config={"effort": "low"},
+    )
+    if response.stop_reason == "refusal":
+        log.warning("claude declined (%s), %s", getattr(response, "stop_details", None), response._request_id)
+        return ""
+    if response.stop_reason == "max_tokens":
+        log.warning("claude ran out of tokens, %s", response._request_id)
+    return "".join(block.text for block in response.content if block.type == "text").strip()
 
 
 # -------------------------------------------------------------- sources --
@@ -871,6 +869,16 @@ def message_text(event: RoomMessageText) -> str:
     return body
 
 
+def quoted_text(event: RoomMessageText) -> str:
+    """The text a reply quotes in that fallback, without the "> " marks and the
+    quoted sender: what the message answers, when it is no longer in memory."""
+    if "m.in_reply_to" not in event.source.get("content", {}).get("m.relates_to", {}):
+        return ""
+    if not (quote := re.match(r"\A((?:>.*\n)+)", event.body)):
+        return ""
+    return re.sub(r"\A<[^>]+> ", "", re.sub(r"(?m)^> ?", "", quote.group(1))).strip()
+
+
 # ------------------------------------------------------------------ bot --
 
 
@@ -890,7 +898,8 @@ class Jay:
         self.started_at = time.time()
         self.room_id = ROOM
         self.feeds: dict[str, tuple[float, list[dict]]] = {}
-        self.history: dict[str, collections.deque[tuple[str, str]]] = collections.defaultdict(
+        # history: (event id, sender name, text) of the last messages per room.
+        self.history: dict[str, collections.deque[tuple[str, str, str]]] = collections.defaultdict(
             lambda: collections.deque(maxlen=HISTORY)
         )
         self.own_events: collections.deque[str] = collections.deque(maxlen=200)
@@ -970,8 +979,12 @@ class Jay:
         # Every message, ours included, is remembered as context for replies.
         name = "Jay Vala" if event.sender == USER_ID else room.user_name(event.sender) or event.sender
         body = message_text(event)
-        earlier = "\n".join(f"{n}: {' '.join(t.split())[:300]}" for n, t in self.history[room.room_id])
-        self.history[room.room_id].append((name, body))
+        earlier = "\n".join(f"{n}: {' '.join(t.split())[:600]}" for _, n, t in self.history[room.room_id])
+        reply_to = event.source.get("content", {}).get("m.relates_to", {}).get("m.in_reply_to", {}).get("event_id")
+        replied = next(((n, t) for i, n, t in self.history[room.room_id] if reply_to and i == reply_to), None)
+        if not replied and (quote := quoted_text(event)):
+            replied = ("alguém", quote)
+        self.history[room.room_id].append((event.event_id, name, body))
         if event.sender == USER_ID:
             self.own_events.append(event.event_id)
             return
@@ -1011,8 +1024,15 @@ class Jay:
             f"{weather}"
             "Últimas mensagens da sala, da mais antiga para a mais recente:\n"
             f"{earlier or '(nenhuma)'}\n\n"
-            f"Agora {name} escreveu, dirigindo-se a ti:\n«{body}»\n\n"
-            "Responde como o Jay Vala, em conversa, só a esta última mensagem. Trata as "
+            + (
+                f"{name} está a responder a esta mensagem de {replied[0]}:\n«{' '.join(replied[1].split())[:1500]}»\n\n"
+                if replied
+                else ""
+            )
+            + f"Agora {name} escreveu:\n«{body}»\n\n"
+            "Se esta mensagem não for para ti (falam de ti a outra pessoa, ou dizem que não "
+            "falavam contigo) ou não pedir resposta, escreve só «—» e mais nada. "
+            "Se for, responde como o Jay Vala, em conversa, só a esta última mensagem. Trata as "
             "pessoas pelo primeiro nome e só de vez em quando; não comeces a resposta "
             "pelo nome de quem escreveu. A agenda "
             "serve para quando perguntam o que há para fazer ou por um evento concreto: "
@@ -1027,12 +1047,16 @@ class Jay:
             "nem voltes a anunciar eventos que já referiste. Quando te pedem o link ou mais "
             "pormenores de um evento, repete o nome dele na resposta: os links dos eventos "
             "que nomeias são acrescentados no fim da mensagem, por isso nunca digas que não "
-            "os tens."
+            "os tens. Se a agenda não disser o que te perguntam (o filme de uma sessão, por "
+            "exemplo), diz que não sabes."
         )
         try:
-            text = await asyncio.to_thread(llm, prompt, 400)
+            text = await asyncio.to_thread(llm, prompt)
         except Exception:
             log.exception("llm failed")
+            return
+        if text.strip() in ("", "—", "-"):
+            log.info("nothing to say to %s", event.sender)
             return
         if links := event_links(text, events, now):
             text += "\n\n" + "\n".join(links)
