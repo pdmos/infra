@@ -22,5 +22,10 @@ in
     ];
   };
 
+  # The login server is the headscale on this host. At boot tailscaled first
+  # tries it before nginx is listening and only retries about two minutes
+  # later, past the default 90 s start timeout.
+  systemd.services.tailscaled-autoconnect.serviceConfig.TimeoutStartSec = "5min";
+
   networking.firewall.trustedInterfaces = [ "tailscale0" ];
 }
