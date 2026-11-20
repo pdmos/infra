@@ -34,7 +34,7 @@ resource "hcloud_rdns" "lena_ipv4" {
 
 resource "hcloud_rdns" "lena_ipv6" {
   primary_ip_id = hcloud_primary_ip.lena_primary_ipv6.id
-  ip_address    = hcloud_primary_ip.lena_primary_ipv6.ip_address
+  ip_address    = hcloud_server.lena.ipv6_address
   dns_ptr       = "mail.pdmos.pt"
 }
 

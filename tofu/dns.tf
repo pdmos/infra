@@ -70,7 +70,7 @@ resource "cloudflare_dns_record" "pdmos_pt_a" {
 resource "cloudflare_dns_record" "pdmos_pt_aaaa" {
   zone_id = data.cloudflare_zone.pdmos_pt.id
   name    = "@"
-  content = hcloud_primary_ip.lena_primary_ipv6.ip_address
+  content = hcloud_server.lena.ipv6_address
   type    = "AAAA"
   proxied = true
   ttl     = 1
@@ -102,7 +102,7 @@ resource "cloudflare_dns_record" "pdmos_pt_subdomain_aaaa" {
 
   zone_id = data.cloudflare_zone.pdmos_pt.id
   name    = "${each.key}.${local.pdmos_pt_domain}"
-  content = hcloud_primary_ip.lena_primary_ipv6.ip_address
+  content = hcloud_server.lena.ipv6_address
   type    = "AAAA"
 
   proxied = try(each.value.proxied, true)
