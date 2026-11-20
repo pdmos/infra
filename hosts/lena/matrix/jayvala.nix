@@ -5,6 +5,7 @@ let
     (ps.matrix-nio.override { withVodozemac = true; })
     ps.beautifulsoup4
     ps.pypdf
+    ps.anthropic
   ]);
 
   # Where the bot reads events from. `home` marks the mayor's own municipality:
@@ -75,11 +76,8 @@ in
       JAYVALA_SOURCES = builtins.toJSON sources;
       JAYVALA_WEATHER = builtins.toJSON weather;
       JAYVALA_RESTAURANTS = "${./jayvala/restaurantes.json}";
-      # Any OpenAI-compatible chat endpoint. For Amália on the tailnet, e.g.
-      # "http://<host>.pdmos.ts:11434/v1/chat/completions" with the Ollama model
-      # name, and drop the llm-api-key credential below.
-      JAYVALA_LLM_URL = "https://openrouter.ai/api/v1/chat/completions";
-      JAYVALA_LLM_MODEL = "mistralai/mistral-small-3.2-24b-instruct";
+      # Claude through the Anthropic API; its key is the llm-api-key credential.
+      JAYVALA_LLM_MODEL = "claude-haiku-5-5";
       JAYVALA_POST_HOUR = "8";
       JAYVALA_REPLIES_PER_HOUR = "10";
       JAYVALA_TZ = "Europe/Lisbon";
