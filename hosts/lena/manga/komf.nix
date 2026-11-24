@@ -68,6 +68,23 @@ in
 
   systemd.services.podman-komf = {
     after = [ "komga.service" ];
+    partOf = [ "komga.service" ];
+
+    # Komf subscribes to Komga's event stream only at startup, so starting before
+    # Komga is ready breaks notifications until Komf restarts.
+    # Bounded because the OCI module sets TimeoutStartSec=0.
+    preStart = ''
+      for _ in $(seq 60); do
+        if ${pkgs.curl}/bin/curl -fs --max-time 5 -o /dev/null \
+          "http://127.0.0.1:${toString config.services.komga.settings.server.port}/actuator/health"; then
+          exit 0
+        fi
+        sleep 2
+      done
+      echo "komga did not become healthy in time" >&2
+      exit 1
+    '';
+
     serviceConfig.StateDirectory = "komf";
     serviceConfig.StateDirectoryMode = "0700";
   };
