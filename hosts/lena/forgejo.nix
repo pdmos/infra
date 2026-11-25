@@ -43,7 +43,11 @@ in
 
       session.COOKIE_SECURE = true;
 
-      service.DISABLE_REGISTRATION = true;
+      service = {
+        DISABLE_REGISTRATION = true;
+        # hide the local login form; sign-in page redirects to the single OAuth2 provider
+        ENABLE_INTERNAL_SIGNIN = false;
+      };
 
       oauth2_client = {
         ENABLE_AUTO_REGISTRATION = true;
