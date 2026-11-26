@@ -55,8 +55,27 @@ in
         UPDATE_AVATAR = true;
         USERNAME = "preferred_username";
       };
+
     };
   };
+
+  # Custom logo, but the PNG lives in the site assets; the navbar template
+  # references logo.svg, so we wrap the PNG as an embedded data URI.
+  systemd.tmpfiles.rules =
+    let
+      inherit (cfg) customDir user group;
+      public = "${customDir}/public";
+      logoSvg = pkgs.runCommand "logo.svg" { } ''
+        printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><image href="data:image/png;base64,%s" width="400" height="400"/></svg>' \
+          "$(${pkgs.coreutils}/bin/base64 -w0 ${../../site/static/logo.png})" > $out
+      '';
+    in
+    [
+      "d '${public}' 0750 ${user} ${group} - -"
+      "d '${public}/assets' 0750 ${user} ${group} - -"
+      "d '${public}/assets/img' 0750 ${user} ${group} - -"
+      "C+ '${public}/assets/img/logo.svg' - ${user} ${group} - ${logoSvg}"
+    ];
 
   # Declaratively provision the Pocket ID OAuth2 source.
   # The client must exist in Pocket ID with callback URL:
