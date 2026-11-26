@@ -13,6 +13,8 @@
     ./acme.nix
     ./mailserver.nix
     ./pocket-id.nix
+    ./forgejo.nix
+    ./forgejo.nix
     ./manga
     ./prometheus.nix
     ./grafana.nix

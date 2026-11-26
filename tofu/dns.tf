@@ -17,6 +17,11 @@ locals {
       proxied     = true
       description = "Komga manga server"
     }
+    git = {
+      proxied     = false # SSH clone URLs point at this hostname
+      ttl         = 3600
+      description = "Forgejo git server"
+    }
     ts = {
       proxied     = false # https://headscale.net/stable/ref/integration/reverse-proxy/#cloudflare
       ttl         = 3600

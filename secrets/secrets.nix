@@ -21,6 +21,7 @@ in
   "grafana-secret-key.age".publicKeys = [ lena ] ++ admins;
   "grafana-oauth2-client-secret.age".publicKeys = [ lena ] ++ admins;
   "komga-oidc.age".publicKeys = [ lena ] ++ admins;
+  "forgejo-oidc.age".publicKeys = [ lena ] ++ admins;
   "komf-komga-password.age".publicKeys = [ lena ] ++ admins;
   "komf-matrix-apprise-url.age".publicKeys = [ lena ] ++ admins;
   "mailserver-diogo-password.age".publicKeys = [ lena ] ++ admins;
